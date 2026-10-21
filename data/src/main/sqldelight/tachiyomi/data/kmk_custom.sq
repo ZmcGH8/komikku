@@ -1,0 +1,24 @@
+-- KMK -->
+-- Custom build: chapter counts that count each chapter number once, across every merged source and scanlator.
+-- Read-only queries only (no schema changes), so no database migration is needed.
+
+uniqueChapterCounts:
+SELECT
+    U.owner_id AS mangaId,
+    count(DISTINCT U.chapter_key) AS uniqueTotal,
+    count(DISTINCT CASE WHEN U.is_read = 1 THEN U.chapter_key END) AS uniqueRead
+FROM (
+    SELECT
+        coalesce(ME.merge_id, C.manga_id) AS owner_id,
+        CASE WHEN C.chapter_number >= 0 THEN C.chapter_number ELSE -1.0 - C._id END AS chapter_key,
+        C.read AS is_read
+    FROM chapters C
+    LEFT JOIN excluded_scanlators ES
+    ON C.manga_id = ES.manga_id
+    AND C.scanlator = ES.scanlator
+    LEFT JOIN merged ME
+    ON ME.manga_id = C.manga_id
+    WHERE ES.scanlator IS NULL
+) AS U
+GROUP BY U.owner_id;
+-- KMK <--

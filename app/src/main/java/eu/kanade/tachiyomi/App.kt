@@ -98,6 +98,8 @@ import timber.log.Timber
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import tachiyomi.domain.library.model.LibraryManga
+import tachiyomi.domain.library.service.LibraryPreferences
 import java.security.Security
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -220,6 +222,11 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         // KMK -->
         MangaCoverMetadata.load()
+
+        // Custom build: count each chapter number once for remaining-chapter counts
+        Injekt.get<LibraryPreferences>().dedupeChapterCounts().changes()
+            .onEach { LibraryManga.dedupeChapterCounts = it }
+            .launchIn(scope)
         // KMK <--
 
         // Updates widget update

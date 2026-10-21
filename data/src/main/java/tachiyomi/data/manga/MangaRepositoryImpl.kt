@@ -1,6 +1,10 @@
 package tachiyomi.data.manga
 
 import kotlinx.coroutines.flow.Flow
+// KMK -->
+import kotlinx.coroutines.flow.combine
+import tachiyomi.data.UniqueChapterCounts
+// KMK <--
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.DatabaseHandler
@@ -56,12 +60,40 @@ class MangaRepositoryImpl(
     }
 
     override suspend fun getLibraryManga(): List<LibraryManga> {
-        return handler.awaitList { libraryViewQueries.library(MangaMapper::mapLibraryManga) }
+        // KMK -->
+        val library = handler.awaitList { libraryViewQueries.library(MangaMapper::mapLibraryManga) }
+        val uniqueCounts = handler.awaitList { kmk_customQueries.uniqueChapterCounts() }
+        return library.withUniqueCounts(uniqueCounts)
+        // KMK <--
     }
 
     override fun getLibraryMangaAsFlow(): Flow<List<LibraryManga>> {
-        return handler.subscribeToList { libraryViewQueries.library(MangaMapper::mapLibraryManga) }
+        // KMK -->
+        return combine(
+            handler.subscribeToList { libraryViewQueries.library(MangaMapper::mapLibraryManga) },
+            handler.subscribeToList { kmk_customQueries.uniqueChapterCounts() },
+        ) { library, uniqueCounts ->
+            library.withUniqueCounts(uniqueCounts)
+        }
+        // KMK <--
     }
+
+    // KMK -->
+    private fun List<LibraryManga>.withUniqueCounts(uniqueCounts: List<UniqueChapterCounts>): List<LibraryManga> {
+        val byManga = HashMap<Long, UniqueChapterCounts>(uniqueCounts.size)
+        uniqueCounts.forEach { row ->
+            val id: Long? = row.mangaId
+            if (id != null) byManga[id] = row
+        }
+        return map { libraryManga ->
+            val row = byManga[libraryManga.id] ?: return@map libraryManga
+            libraryManga.copy(
+                uniqueTotalChapters = row.uniqueTotal,
+                uniqueReadCount = row.uniqueRead,
+            )
+        }
+    }
+    // KMK <--
 
     override fun getFavoritesBySourceId(sourceId: Long): Flow<List<Manga>> {
         return handler.subscribeToList { mangasQueries.getFavoriteBySourceId(sourceId, MangaMapper::mapManga) }

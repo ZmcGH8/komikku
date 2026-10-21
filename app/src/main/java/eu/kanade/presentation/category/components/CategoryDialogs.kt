@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,10 +30,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.core.preference.asToggleableState
+import eu.kanade.domain.ai.HouriPlusAi
 import eu.kanade.presentation.category.visualName
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.domain.category.model.Category
 import tachiyomi.i18n.MR
@@ -450,6 +453,9 @@ fun ChangeCategoryDialog(
     onDismissRequest: () -> Unit,
     onEditCategories: () -> Unit,
     onConfirm: (List<Long>, List<Long>) -> Unit,
+    // KMK --> Houri+: AI category suggestions (ids to tick), null when not offered
+    onAiSuggest: (suspend (List<Category>) -> Set<Long>?)? = null,
+    // KMK <--
 ) {
     if (initialSelection.isEmpty()) {
         AlertDialog(
@@ -474,6 +480,11 @@ fun ChangeCategoryDialog(
         return
     }
     var selection by remember { mutableStateOf(initialSelection) }
+    // KMK --> Houri+
+    val scope = rememberCoroutineScope()
+    var suggesting by remember { mutableStateOf(false) }
+    val showAiSuggest = remember(onAiSuggest) { onAiSuggest != null && HouriPlusAi.isAvailable() }
+    // KMK <--
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
@@ -484,6 +495,29 @@ fun ChangeCategoryDialog(
                 }) {
                     Text(text = stringResource(MR.strings.action_edit))
                 }
+                // KMK --> Houri+: tick the categories the AI suggests (nothing is saved until OK)
+                if (showAiSuggest) {
+                    tachiyomi.presentation.core.components.material.TextButton(
+                        enabled = !suggesting,
+                        onClick = {
+                            suggesting = true
+                            scope.launch {
+                                val ids = onAiSuggest?.invoke(selection.map { it.value }).orEmpty()
+                                selection = selection.map { checkbox ->
+                                    when {
+                                        checkbox.value.id !in ids -> checkbox
+                                        checkbox is CheckboxState.TriState -> CheckboxState.TriState.Include(checkbox.value)
+                                        else -> CheckboxState.State.Checked(checkbox.value)
+                                    }
+                                }.toImmutableList()
+                                suggesting = false
+                            }
+                        },
+                    ) {
+                        Text(text = stringResource(if (suggesting) KMR.strings.action_custom_ai_suggesting else KMR.strings.action_custom_ai_suggest))
+                    }
+                }
+                // KMK <--
                 Spacer(modifier = Modifier.weight(1f))
                 tachiyomi.presentation.core.components.material.TextButton(onClick = onDismissRequest) {
                     Text(text = stringResource(MR.strings.action_cancel))

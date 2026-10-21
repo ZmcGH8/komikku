@@ -20,6 +20,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import coil3.Image
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.insertSeparators
+import eu.kanade.domain.ai.HouriPlusAi
 import eu.kanade.domain.chapter.interactor.GetAvailableScanlators
 import eu.kanade.domain.chapter.interactor.SetReadStatus
 import eu.kanade.domain.chapter.model.applyFilters
@@ -866,6 +867,37 @@ class MangaScreenModel(
             }
         }
     }
+
+    // KMK --> Houri+
+    /**
+     * Asks the AI which of [categories] fit [manga] (genre, setting, story, themes), from its title, tags and
+     * description. Categories bound to a tracker status are not offered. Null when the AI isn't available.
+     */
+    suspend fun suggestCategories(manga: Manga, categories: List<Category>): Set<Long>? {
+        val byId = categories.associateBy { it.id }
+        val choices = categories.filter { !it.isSystemCategory && it.trackStatus == null && it.name.isNotBlank() }
+        if (choices.isEmpty()) return null
+        val prompt = buildString {
+            appendLine("Pick the categories that fit this comic series from the numbered list.")
+            appendLine("Only choose categories about its genre, setting, story or themes; skip any about reading status,")
+            appendLine("personal ratings or the reader's own lists.")
+            appendLine("Series: ${manga.title}")
+            manga.genre?.takeIf { it.isNotEmpty() }?.let { appendLine("Tags: ${it.joinToString()}") }
+            manga.description?.takeIf { it.isNotBlank() }?.let { appendLine("Description: ${it.take(1800)}") }
+            appendLine("Categories:")
+            choices.forEachIndexed { index, category ->
+                val parent = byId[category.parentId]
+                appendLine("${index + 1}. ${if (parent != null) "${parent.name} > ${category.name}" else category.name}")
+            }
+            append("Reply with only the numbers of the fitting categories, separated by commas.")
+        }
+        val answer = HouriPlusAi.ask(prompt) ?: return null
+        return Regex("""\d+""").findAll(answer)
+            .mapNotNull { it.value.toIntOrNull()?.let { number -> choices.getOrNull(number - 1)?.id } }
+            .take(8)
+            .toSet()
+    }
+    // KMK <--
 
     fun deleteMerge(reference: MergedMangaReference) {
         screenModelScope.launchNonCancellable {

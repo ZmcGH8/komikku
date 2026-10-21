@@ -540,6 +540,9 @@ class MangaScreen(
                     onConfirm = { include, _ ->
                         screenModel.moveMangaToCategoriesAndAddToLibrary(dialog.manga, include)
                     },
+                    // KMK --> Houri+
+                    onAiSuggest = { categories -> screenModel.suggestCategories(dialog.manga, categories) },
+                    // KMK <--
                 )
             }
             is MangaScreenModel.Dialog.DeleteChapters -> {

@@ -784,4 +784,6 @@
     <string name="custom_filter_tags_details">Checked: entries must have all of these tags. Crossed out: entries with any of these tags are hidden.</string>
     <string name="pref_custom_ai_library_matching">Use AI for titles under other names</string>
     <string name="pref_custom_ai_library_matching_summary">When a source lists a title whose name nearly matches one in your library (another translation of the name), asks your AI (Settings → Translation) if it\'s the same series. A yes hides it from then on. Needs the on-device model or a cloud API key</string>
+    <string name="action_custom_ai_suggest">AI suggest</string>
+    <string name="action_custom_ai_suggesting">Asking AI…</string>
 </resources>

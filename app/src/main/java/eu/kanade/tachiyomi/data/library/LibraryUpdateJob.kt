@@ -308,7 +308,11 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                         libraryManga.filter { it.categories.any { id -> id in categoryIds } }
                     }
                 }
-                LibraryGroup.BY_AUTHOR, LibraryGroup.BY_SCANLATOR -> {
+                LibraryGroup.BY_AUTHOR,
+                LibraryGroup.BY_ARTIST,
+                LibraryGroup.BY_STUDIO,
+                LibraryGroup.BY_SCANLATOR,
+                -> {
                     val mangaIds = groupExtra?.split(',')?.mapNotNull { it.toLongOrNull() }?.toSet()
                     if (mangaIds.isNullOrEmpty()) {
                         libraryManga

@@ -133,6 +133,8 @@ data object LibraryTab : Tab {
                     LibraryGroup.BY_TAG,
                     LibraryGroup.BY_AUTHOR,
                     LibraryGroup.BY_SCANLATOR,
+                    LibraryGroup.BY_ARTIST,
+                    LibraryGroup.BY_STUDIO,
                     -> category?.let(screenModel::groupUpdateExtra)
                     // KMK <--
                     else -> null

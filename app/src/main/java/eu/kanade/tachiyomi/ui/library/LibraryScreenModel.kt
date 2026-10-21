@@ -105,8 +105,10 @@ import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.library.model.LibrarySort
+import tachiyomi.domain.library.model.artistsFromDescription
 import tachiyomi.domain.library.model.averageReadersFromDescription
 import tachiyomi.domain.library.model.sort
+import tachiyomi.domain.library.model.studiosFromDescription
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetIdsOfFavoriteMangaWithMetadata
 import tachiyomi.domain.manga.interactor.GetLibraryManga
@@ -661,6 +663,12 @@ class LibraryScreenModel(
             LibraryGroup.BY_SCANLATOR -> {
                 return groupByScanlator()
             }
+            LibraryGroup.BY_ARTIST -> {
+                return groupByNames(KMR.strings.custom_group_no_artist, ARTIST_TAB_ID) { artistsOf(it) }
+            }
+            LibraryGroup.BY_STUDIO -> {
+                return groupByNames(KMR.strings.custom_group_no_studio, STUDIO_TAB_ID) { studiosOf(it) }
+            }
 
             else -> {
                 return getGroupedMangaItems(
@@ -747,19 +755,46 @@ class LibraryScreenModel(
 
     /** Custom build: one tab per author; an entry shows in the tab of each of its authors. */
     private fun List<LibraryItem>.groupByAuthor(): Map<Category, List</* LibraryItem */ Long>> {
-        val byAuthor = java.util.TreeMap<String, MutableList<Long>>(String.CASE_INSENSITIVE_ORDER)
+        return groupByNames(KMR.strings.custom_group_no_author, AUTHOR_TAB_ID) {
+            splitAuthors(it.libraryManga.manga.author)
+        }
+    }
+
+    /** Custom build: one tab per name returned by [namesOf]; an entry shows in the tab of each of its names. */
+    private fun List<LibraryItem>.groupByNames(
+        noneLabel: dev.icerock.moko.resources.StringResource,
+        firstId: Long,
+        namesOf: (LibraryItem) -> List<String>,
+    ): Map<Category, List</* LibraryItem */ Long>> {
+        val byName = java.util.TreeMap<String, MutableList<Long>>(String.CASE_INSENSITIVE_ORDER)
         val none = mutableListOf<Long>()
         forEach { item ->
-            val authors = splitAuthors(item.libraryManga.manga.author)
-            if (authors.isEmpty()) none.add(item.id)
-            authors.forEach { author -> byAuthor.getOrPut(author) { mutableListOf() }.add(item.id) }
+            val names = namesOf(item)
+            if (names.isEmpty()) none.add(item.id)
+            names.forEach { name -> byName.getOrPut(name) { mutableListOf() }.add(item.id) }
         }
         return namedTabs(
-            names = byAuthor,
-            noneLabel = preferences.context.stringResource(KMR.strings.custom_group_no_author),
+            names = byName,
+            noneLabel = preferences.context.stringResource(noneLabel),
             none = none,
-            firstId = AUTHOR_TAB_ID,
+            firstId = firstId,
         )
+    }
+
+    /** Custom build: artists credited in the description, else the artist field. */
+    private fun artistsOf(item: LibraryItem): List<String> {
+        val manga = item.libraryManga.manga
+        return artistsFromDescription(manga.description).ifEmpty { splitAuthors(manga.artist) }
+    }
+
+    /** Custom build: studios credited in the description, else author/artist names that are studios. */
+    private fun studiosOf(item: LibraryItem): List<String> {
+        val manga = item.libraryManga.manga
+        return studiosFromDescription(manga.description).ifEmpty {
+            (splitAuthors(manga.author) + splitAuthors(manga.artist))
+                .filter { it.contains("studio", ignoreCase = true) }
+                .distinctBy { it.lowercase() }
+        }
     }
 
     /** Custom build: one tab per scanlator (or source, for chapters without one). */
@@ -882,6 +917,12 @@ class LibraryScreenModel(
         val firstAuthors by lazy {
             favoritesById.mapValues { (_, item) -> splitAuthors(item.libraryManga.manga.author).firstOrNull() }
         }
+        val firstArtists by lazy {
+            favoritesById.mapValues { (_, item) -> artistsOf(item).firstOrNull() }
+        }
+        val firstStudios by lazy {
+            favoritesById.mapValues { (_, item) -> studiosOf(item).firstOrNull() }
+        }
         val mainScanlators by lazy {
             loadScanlatorCounts().mapValues { (_, counts) -> counts.maxByOrNull { it.value }?.key }
         }
@@ -958,6 +999,12 @@ class LibraryScreenModel(
                 }
                 LibrarySort.Type.Scanlator -> {
                     compareNamesMissingLast(mainScanlators[manga1.id], mainScanlators[manga2.id], sort.isAscending)
+                }
+                LibrarySort.Type.Artist -> {
+                    compareNamesMissingLast(firstArtists[manga1.id], firstArtists[manga2.id], sort.isAscending)
+                }
+                LibrarySort.Type.Studio -> {
+                    compareNamesMissingLast(firstStudios[manga1.id], firstStudios[manga2.id], sort.isAscending)
                 }
                 // KMK <--
             }
@@ -2071,6 +2118,8 @@ class LibraryScreenModel(
         private const val TAG_TAB_ID = 2_000_000_000L
         private const val AUTHOR_TAB_ID = 3_000_000_000L
         private const val SCANLATOR_TAB_ID = 4_000_000_000L
+        private const val ARTIST_TAB_ID = 5_000_000_000L
+        private const val STUDIO_TAB_ID = 6_000_000_000L
 
         private val AUTHOR_SEPARATORS = Regex("""\s*[,;/&]\s*""")
 

@@ -25,6 +25,12 @@ object LibraryGroup {
 
     /** One tab per scanlator (or source, for chapters without a scanlator) */
     const val BY_SCANLATOR = 23
+
+    /** One tab per artist */
+    const val BY_ARTIST = 24
+
+    /** One tab per studio (from the "Credits" in the entry's description) */
+    const val BY_STUDIO = 25
     // KMK <--
 
     fun groupTypeStringRes(type: Int): StringResource {

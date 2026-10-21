@@ -20,7 +20,7 @@ data class LibrarySort(
         override val flag: Long,
     ) : FlagWithMask {
 
-        override val mask: Long = 0b00111100L
+        override val mask: Long = /* KMK --> */ 0b10111100L /* KMK <-- */
 
         data object Alphabetical : Type(0b00000000)
         data object LastRead : Type(0b00000100)
@@ -38,10 +38,15 @@ data class LibrarySort(
         // SY <--
 
         // KMK -->
-        // Custom build: "Avg Readers" from the entry's description (high flag value to stay clear of upstream)
-        data object Popularity : Type(0b00111000)
-        data object Author : Type(0b00110100)
-        data object Scanlator : Type(0b00110000)
+        // Custom build: sort types use the otherwise unused top bit so upstream can keep adding types
+        /** "Avg Readers" from the entry's description */
+        data object Popularity : Type(0b10000000)
+        data object Author : Type(0b10000100)
+        data object Scanlator : Type(0b10001000)
+        data object Artist : Type(0b10001100)
+
+        /** Studio from the "Credits" in the entry's description */
+        data object Studio : Type(0b10010000)
         // KMK <--
 
         companion object {
@@ -90,7 +95,7 @@ data class LibrarySort(
                 Type.DateAdded,
                 Type.TrackerMean,
                 /* SY -->*/ Type.TagList, /* SY <--*/
-                /* KMK -->*/ Type.Popularity, Type.Author, Type.Scanlator, /* KMK <--*/
+                /* KMK -->*/ Type.Popularity, Type.Author, Type.Artist, Type.Studio, Type.Scanlator, /* KMK <--*/
                 Type.Random,
             )
         }
@@ -126,6 +131,8 @@ data class LibrarySort(
                     "POPULARITY" -> Type.Popularity
                     "AUTHOR" -> Type.Author
                     "SCANLATOR" -> Type.Scanlator
+                    "ARTIST" -> Type.Artist
+                    "STUDIO" -> Type.Studio
                     // KMK <--
                     "RANDOM" -> Type.Random
                     else -> Type.Alphabetical
@@ -156,6 +163,8 @@ data class LibrarySort(
             Type.Popularity -> "POPULARITY"
             Type.Author -> "AUTHOR"
             Type.Scanlator -> "SCANLATOR"
+            Type.Artist -> "ARTIST"
+            Type.Studio -> "STUDIO"
             // KMK <--
             Type.Random -> "RANDOM"
         }

@@ -674,7 +674,9 @@ class LibraryScreenModel(
                     else -> manga1.libraryManga.unreadCount.compareTo(manga2.libraryManga.unreadCount)
                 }
                 LibrarySort.Type.TotalChapters -> {
-                    manga1.libraryManga.totalChapters.compareTo(manga2.libraryManga.totalChapters)
+                    // KMK -->
+                    manga1.libraryManga.displayTotalChapters.compareTo(manga2.libraryManga.displayTotalChapters)
+                    // KMK <--
                 }
                 LibrarySort.Type.LatestChapter -> {
                     manga1.libraryManga.latestUpload.compareTo(manga2.libraryManga.latestUpload)

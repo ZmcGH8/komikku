@@ -270,6 +270,11 @@ class LibraryPreferences(
 
     // SY <--
 
+    // KMK -->
+    /** Custom build: count each chapter number once (merged sources / multiple scanlators) for remaining chapters. */
+    fun dedupeChapterCounts() = preferenceStore.getBoolean("pref_custom_dedupe_chapter_counts", true)
+    // KMK <--
+
     companion object {
         const val DEVICE_ONLY_ON_WIFI = "wifi"
         const val DEVICE_NETWORK_NOT_METERED = "network_not_metered"

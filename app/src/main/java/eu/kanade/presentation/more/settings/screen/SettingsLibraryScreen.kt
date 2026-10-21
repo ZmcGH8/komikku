@@ -302,6 +302,11 @@ object SettingsLibraryScreen : SearchableSettings {
                     title = stringResource(KMR.strings.pref_fetch_manga_chapters_on_add),
                     subtitle = stringResource(KMR.strings.pref_fetch_manga_chapters_on_add_description),
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.dedupeChapterCounts(),
+                    title = stringResource(KMR.strings.pref_custom_dedupe_chapter_counts),
+                    subtitle = stringResource(KMR.strings.pref_custom_dedupe_chapter_counts_summary),
+                ),
                 // KMK <--
             ),
         )

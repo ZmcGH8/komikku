@@ -238,4 +238,7 @@
     <string name="pref_discord_show_download_button_summary">Displays a button to download the app</string>
     <string name="pref_discord_show_discord_button">Show Discord Button</string>
     <string name="pref_discord_show_discord_button_summary">Displays a button to join the Discord server</string>
+    <!-- Custom build -->
+    <string name="pref_custom_dedupe_chapter_counts">Count each chapter once</string>
+    <string name="pref_custom_dedupe_chapter_counts_summary">Remaining and total chapter counts ignore duplicates from merged sources and multiple scanlators</string>
 </resources>

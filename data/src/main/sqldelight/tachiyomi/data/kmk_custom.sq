@@ -21,4 +21,21 @@ FROM (
     WHERE ES.scanlator IS NULL
 ) AS U
 GROUP BY U.owner_id;
+
+-- Every source entry that is part of a merged library entry (merge children are stored as non-favorites).
+libraryMergeChildren:
+SELECT
+    ME.merge_id AS libraryId,
+    ME.manga_source AS sourceId,
+    ME.manga_url AS url,
+    C.title AS title,
+    C.author AS author,
+    C.artist AS artist
+FROM merged ME
+JOIN mangas M
+ON M._id = ME.merge_id
+LEFT JOIN mangas C
+ON C._id = ME.manga_id
+WHERE M.favorite = 1
+AND ME.manga_source != 6969;
 -- KMK <--

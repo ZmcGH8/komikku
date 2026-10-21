@@ -241,4 +241,11 @@
     <!-- Custom build -->
     <string name="pref_custom_dedupe_chapter_counts">Count each chapter once</string>
     <string name="pref_custom_dedupe_chapter_counts_summary">Remaining and total chapter counts ignore duplicates from merged sources and multiple scanlators</string>
+    <string name="pref_custom_hide_library_matches">Hide library titles on every source</string>
+    <string name="pref_custom_hide_library_matches_summary">Hides titles in your library, their merged sources, and the same title on other sources (exact title or alternative-name match). Not applied when searching for a title to migrate or merge</string>
+    <string name="pref_custom_hidden_matches">Titles hidden by name match</string>
+    <string name="pref_custom_hidden_matches_summary">%1$d hidden. Tap to review</string>
+    <string name="pref_custom_hidden_matches_empty">Nothing has been hidden by a name match yet</string>
+    <string name="pref_custom_hidden_match_detail">%1$s · in your library as %2$s</string>
+    <string name="action_custom_show_again">Show again</string>
 </resources>

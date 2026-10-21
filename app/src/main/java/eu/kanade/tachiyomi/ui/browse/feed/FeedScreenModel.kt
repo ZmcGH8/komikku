@@ -8,6 +8,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.util.fastAny
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.source.interactor.LibraryMatcher
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.browse.FeedItemUI
 import eu.kanade.tachiyomi.source.Source
@@ -263,6 +264,8 @@ open class FeedScreenModel(
 
     // KMK -->
     private val hideInLibraryFeedItems = sourcePreferences.hideInLibraryFeedItems()
+    private val hideLibraryMatches = sourcePreferences.hideLibraryMatches()
+    private val libraryMatcher by lazy { LibraryMatcher() }
     // KMK <--
 
     /**
@@ -307,7 +310,13 @@ open class FeedScreenModel(
                                 .distinctBy { it.url }
                                 .let { networkToLocalManga(it) }
                                 // KMK -->
-                                .filter { !hideInLibraryFeedItems.get() || !it.favorite },
+                                .filter {
+                                    if (hideLibraryMatches.get()) {
+                                        !libraryMatcher.isInLibrary(it)
+                                    } else {
+                                        !hideInLibraryFeedItems.get() || !it.favorite
+                                    }
+                                },
                             // KMK <--
                         )
                     }

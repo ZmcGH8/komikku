@@ -9,9 +9,6 @@ on:
     branches:
       - custom
   workflow_dispatch:
-  schedule:
-    # Every day at 09:17 UTC: pick up new Komikku commits
-    - cron: '17 9 * * *'
 
 concurrency:
   group: custom-build

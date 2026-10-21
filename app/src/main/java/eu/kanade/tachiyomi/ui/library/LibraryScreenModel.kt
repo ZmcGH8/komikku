@@ -191,11 +191,13 @@ class LibraryScreenModel(
                 combine(
                     state.map { it.includedCategories }.distinctUntilChanged(),
                     state.map { it.excludedCategories }.distinctUntilChanged(),
-                    ::Pair,
+                    // Custom build: tag filter
+                    getTagFilterFlow(),
+                    ::Triple,
                 ),
                 // KMK <--
                 getLibraryItemPreferencesFlow(),
-            ) { (searchQuery, categories, favorites), (tracksMap, trackingFilters), (includedCategories, excludedCategories), itemPreferences ->
+            ) { (searchQuery, categories, favorites), (tracksMap, trackingFilters), (includedCategories, excludedCategories, tagFilter), itemPreferences ->
                 val filteredFavorites = favorites
                     .applyFilters(
                         tracksMap,
@@ -204,6 +206,7 @@ class LibraryScreenModel(
                         // KMK -->
                         includedCategories,
                         excludedCategories,
+                        tagFilter,
                         // KMK <--
                     )
                     .let {
@@ -339,7 +342,10 @@ class LibraryScreenModel(
         combine(
             getLibraryItemPreferencesFlow(),
             getTrackingFiltersFlow(),
-        ) { prefs, trackFilters ->
+            // KMK -->
+            getTagFilterFlow(),
+            // KMK <--
+        ) { prefs, trackFilters/* KMK --> */, tagFilter/* KMK <-- */ ->
             listOf(
                 prefs.filterDownloaded,
                 prefs.filterUnread,
@@ -354,7 +360,8 @@ class LibraryScreenModel(
             )
                 .fastAny { it != TriState.DISABLED } ||
                 // KMK -->
-                prefs.filterCategories
+                prefs.filterCategories ||
+                (tagFilter.enabled && (tagFilter.included.isNotEmpty() || tagFilter.excluded.isNotEmpty()))
             // KMK <--
         }
             .distinctUntilChanged()
@@ -436,6 +443,7 @@ class LibraryScreenModel(
         // KMK -->
         includedCategories: ImmutableSet<Long>,
         excludedCategories: ImmutableSet<Long>,
+        tagFilter: TagFilter,
         // KMK <--
     ): List<LibraryItem> {
         val downloadedOnly = preferences.globalFilterDownloaded
@@ -534,6 +542,15 @@ class LibraryScreenModel(
 
             !isExcluded && isIncluded
         }
+
+        // Custom build: tag filter
+        val filterFnTags: (LibraryItem) -> Boolean = tags@{ item ->
+            if (!tagFilter.enabled || (tagFilter.included.isEmpty() && tagFilter.excluded.isEmpty())) {
+                return@tags true
+            }
+            val mangaTags = item.libraryManga.manga.genre.orEmpty().map { it.trim().lowercase() }.toSet()
+            mangaTags.none { it in tagFilter.excluded } && tagFilter.included.all { it in mangaTags }
+        }
         // KMK <--
 
         return fastFilter {
@@ -548,10 +565,34 @@ class LibraryScreenModel(
                 filterFnLewd(it) &&
                 // SY <--
                 // KMK -->
-                filterFnCategories(it)
+                filterFnCategories(it) &&
+                filterFnTags(it)
             // KMK <--
         }
     }
+
+    // KMK -->
+    /** Custom build: tags are compared ignoring case. */
+    private data class TagFilter(
+        val enabled: Boolean,
+        val included: Set<String>,
+        val excluded: Set<String>,
+    )
+
+    private fun getTagFilterFlow(): Flow<TagFilter> {
+        return combine(
+            libraryPreferences.filterTags().changes(),
+            libraryPreferences.filterTagsInclude().changes(),
+            libraryPreferences.filterTagsExclude().changes(),
+        ) { enabled, included, excluded ->
+            TagFilter(
+                enabled = enabled,
+                included = included.map { it.lowercase() }.toSet(),
+                excluded = excluded.map { it.lowercase() }.toSet(),
+            )
+        }.distinctUntilChanged()
+    }
+    // KMK <--
 
     private fun List<LibraryItem>.applyGrouping(
         categories: List<Category>,

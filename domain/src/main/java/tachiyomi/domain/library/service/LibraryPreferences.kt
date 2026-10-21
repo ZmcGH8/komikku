@@ -276,6 +276,13 @@ class LibraryPreferences(
 
     /** Custom build: broad categories grouping sub-categories, JSON of [tachiyomi.domain.category.model.CategoryGroup]. */
     fun categoryGroups() = preferenceStore.getString("pref_custom_category_groups", "")
+
+    /** Custom build: filter the library by tags (included tags must all be present; any excluded tag hides). */
+    fun filterTags() = preferenceStore.getBoolean("pref_custom_filter_tags", false)
+
+    fun filterTagsInclude() = preferenceStore.getStringSet("pref_custom_filter_tags_include", emptySet())
+
+    fun filterTagsExclude() = preferenceStore.getStringSet("pref_custom_filter_tags_exclude", emptySet())
     // KMK <--
 
     companion object {

@@ -20,6 +20,7 @@ import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
 import okhttp3.Response
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.GetMergedReferencesById
@@ -37,6 +38,10 @@ class MergedSource : HttpSource() {
     private val sourceManager: SourceManager by injectLazy()
     private val downloadManager: DownloadManager by injectLazy()
     private val filterChaptersForDownload: FilterChaptersForDownload by injectLazy()
+
+    // KMK -->
+    private val getChaptersByMangaId: GetChaptersByMangaId by injectLazy()
+    // KMK <--
 
     override val id: Long = MERGED_SOURCE_ID
 
@@ -90,9 +95,23 @@ class MergedSource : HttpSource() {
             val dbManga = mangaInfoReference?.run {
                 getManga.await(mangaUrl, mangaSourceId)?.toSManga()
             }
-            (dbManga ?: mergedManga.toSManga()).copy(
+            // KMK -->
+            // Custom build: take the status from the merged source that has reached the highest chapter,
+            // so an official source's hiatus doesn't override a scan that is still releasing.
+            val infoManga = dbManga ?: mergedManga.toSManga()
+            val statusFromFurthestSource = mangaReferences
+                .filter { it.mangaSourceId != MERGED_SOURCE_ID }
+                .mapNotNull { getManga.await(it.mangaUrl, it.mangaSourceId) }
+                .maxByOrNull { child ->
+                    getChaptersByMangaId.await(child.id).maxOfOrNull { it.chapterNumber } ?: -1.0
+                }
+                ?.status
+                ?.toInt()
+            infoManga.copy(
                 url = manga.url,
+                status = statusFromFurthestSource ?: infoManga.status,
             )
+            // KMK <--
         }
     }
 

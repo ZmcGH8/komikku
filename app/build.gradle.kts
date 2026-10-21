@@ -47,6 +47,9 @@ android {
         buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
         buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
         buildConfigField("boolean", "IS_NOMTL", "false")
+        // KMK --> Houri+ (custom build): GitHub repo ("owner/name") the in-app updater checks; empty = Houri's own
+        buildConfigField("String", "UPDATER_REPO", "\"${project.findProperty("custom-repo") ?: ""}\"")
+        // KMK <--
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -107,6 +110,12 @@ android {
             initWith(release)
 
             applicationIdSuffix = ".beta"
+            // KMK --> Houri+ (custom build): installs alongside Houri with its own name
+            if (project.hasProperty("custom-app")) {
+                applicationIdSuffix = ".plus"
+                resValue("string", "app_name", "Houri+")
+            }
+            // KMK <--
 
             versionNameSuffix = debug.versionNameSuffix
             signingConfig = debug.signingConfig
@@ -142,7 +151,13 @@ android {
             // install uses per-ABI splits; release universal is produced via bundle if needed.
             isUniversalApk = false
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            // KMK --> Houri+ (custom build) only ships the arm64 APK, which keeps the native build short
+            if (project.hasProperty("custom-app")) {
+                include("arm64-v8a")
+            } else {
+                include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            }
+            // KMK <--
         }
     }
 

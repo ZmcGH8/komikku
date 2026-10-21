@@ -34,6 +34,8 @@ class AppUpdateChecker(
                     forceCheck = forceCheck,
                     // KMK --> the no-MTL variant must fetch its own (nomtl-prefixed) APK assets
                     nomtl = BuildConfig.IS_NOMTL,
+                    // Houri+ (custom build): its releases are tagged "h<commit count>"
+                    tagPrefix = CUSTOM_TAG_PREFIX.takeIf { BuildConfig.UPDATER_REPO.isNotEmpty() },
                     // KMK <--
                 ),
             )
@@ -44,7 +46,11 @@ class AppUpdateChecker(
 val GITHUB_REPO: String by lazy { getGithubRepo() }
 
 fun getGithubRepo(peekIntoPreview: Boolean = false): String =
-    if (isPreviewBuildType || peekIntoPreview) {
+    // KMK --> Houri+ (custom build) updates from its own repository
+    if (BuildConfig.UPDATER_REPO.isNotEmpty()) {
+        BuildConfig.UPDATER_REPO
+    } else if (isPreviewBuildType || peekIntoPreview) {
+        // KMK <--
         "PineappleTwilight/komikku-pineapple"
     } else {
         "PineappleTwilight/komikku-pineapple"
@@ -52,8 +58,16 @@ fun getGithubRepo(peekIntoPreview: Boolean = false): String =
 
 val RELEASE_TAG: String by lazy { getReleaseTag() }
 
+// KMK --> Houri+ (custom build)
+const val CUSTOM_TAG_PREFIX = "h"
+// KMK <--
+
 fun getReleaseTag(peekIntoPreview: Boolean = false): String =
-    if (isPreviewBuildType || peekIntoPreview) {
+    // KMK -->
+    if (BuildConfig.UPDATER_REPO.isNotEmpty()) {
+        "$CUSTOM_TAG_PREFIX${BuildConfig.COMMIT_COUNT}"
+    } else if (isPreviewBuildType || peekIntoPreview) {
+        // KMK <--
         "r${BuildConfig.COMMIT_COUNT}"
     } else {
         "v${BuildConfig.VERSION_NAME}"

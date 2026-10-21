@@ -1,0 +1,124 @@
+# KMK -->
+# Houri+ (custom build): builds the lean (no-MTL) preview APK, signs it with the fixed key and publishes it
+# as a release tagged "h<commit count>" for the in-app updater. Logs go to the "ci-logs" branch.
+name: Houri+ build
+
+on:
+  push:
+    branches:
+      - houri-plus
+  workflow_dispatch:
+
+concurrency:
+  group: houri-plus-build
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Houri+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config ninja-build cmake python3 python3-pip nasm gperf libltdl-dev libglib2.0-dev texinfo ccache
+          pip3 install --break-system-packages --upgrade meson || pip3 install --upgrade meson
+
+      - name: Add swap space
+        run: |
+          if ! swapon --show | grep -q /swapfile; then
+            sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+          fi
+          free -h
+
+      - name: Install Android SDK CMake 3.22.1
+        run: |
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -f "$SDKMGR" ] || SDKMGR=$(find "$ANDROID_HOME" -name sdkmanager -type f 2>/dev/null | head -n1)
+          yes | "$SDKMGR" --install "cmake;3.22.1" >/dev/null || true
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-houri-plus-ccache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-houri-plus-ccache-
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install the fixed signing key
+        env:
+          SIGNING_KEY: ${{ secrets.CUSTOM_SIGNING_KEY }}
+        run: |
+          set -e
+          mkdir -p ~/.android
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "$SIGNING_KEY" | base64 -d > ~/.android/debug.keystore
+          else
+            cp custom/signing.keystore ~/.android/debug.keystore
+          fi
+
+      - name: Build APK
+        env:
+          CCACHE_DIR: /home/runner/.ccache
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          JAVA_TOOL_OPTIONS: -Xmx4g
+        run: |
+          set -o pipefail
+          ./gradlew spotlessApply --console=plain 2>&1 | tee build.log
+          ./gradlew assembleNomtlPreview -Pcustom-app -Pcustom-repo=${{ github.repository }} -Penable-updater --max-workers=4 --console=plain 2>&1 | tee -a build.log
+
+      - name: Name the APK
+        id: apk
+        run: |
+          set -e
+          count=$(git rev-list --count HEAD)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          ls app/build/outputs/apk/nomtl/preview/
+          mv app/build/outputs/apk/nomtl/preview/app-nomtl-arm64-v8a-preview.apk "Houri-plus-nomtl-arm64-v8a-h$count.apk"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: h${{ steps.apk.outputs.count }}
+          name: Houri+ h${{ steps.apk.outputs.count }}
+          target_commitish: ${{ steps.apk.outputs.sha }}
+          make_latest: true
+          body: |
+            Houri+ build from commit ${{ steps.apk.outputs.sha }}.
+          files: ./*.apk
+
+      - name: Save the build log
+        if: always()
+        run: |
+          mkdir -p /tmp/log
+          cp build.log /tmp/log/ 2>/dev/null || echo "no build log" > /tmp/log/build.log
+          grep -E "^e: |error:|FAILED|What went wrong|BUILD (SUCCESSFUL|FAILED)" -A3 /tmp/log/build.log > /tmp/log/errors.txt || true
+          echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > /tmp/log/result.txt
+          echo "branch: houri-plus" >> /tmp/log/result.txt
+          echo "commit: $(git rev-parse HEAD)" >> /tmp/log/result.txt
+          echo "result: ${{ job.status }}" >> /tmp/log/result.txt
+          cd /tmp/log
+          git init -q -b ci-logs
+          git config user.name "houri-plus-bot"
+          git config user.email "houri-plus-bot@users.noreply.github.com"
+          git add -A && git commit -qm "houri-plus build ${{ job.status }} (run ${{ github.run_id }})"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
+# KMK <--

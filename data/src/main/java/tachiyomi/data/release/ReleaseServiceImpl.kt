@@ -23,12 +23,26 @@ class ReleaseServiceImpl(
 ) : ReleaseService {
 
     override suspend fun latest(arguments: GetApplicationRelease.Arguments): Release? {
-        val release = with(json) {
-            networkService.client
-                .newCall(GET("https://api.github.com/repos/${arguments.repository}/releases/latest"))
-                .awaitSuccess()
-                .parseAs<GithubRelease>()
+        // KMK --> Houri+ (custom build): newest release with its own tag prefix
+        val tagPrefix = arguments.tagPrefix
+        val release = if (tagPrefix != null) {
+            with(json) {
+                networkService.client
+                    .newCall(GET("https://api.github.com/repos/${arguments.repository}/releases?per_page=30"))
+                    .awaitSuccess()
+                    .parseAs<List<GithubRelease>>()
+            }.firstOrNull { it.version.startsWith(tagPrefix) } ?: return null
+        } else {
+            // KMK <--
+            with(json) {
+                networkService.client
+                    .newCall(GET("https://api.github.com/repos/${arguments.repository}/releases/latest"))
+                    .awaitSuccess()
+                    .parseAs<GithubRelease>()
+            }
+            // KMK -->
         }
+        // KMK <--
 
         val downloadLink = getDownloadLink(release = release, isFoss = arguments.isFoss, nomtl = arguments.nomtl) ?: return null
 

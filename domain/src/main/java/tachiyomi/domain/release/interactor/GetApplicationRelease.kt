@@ -80,6 +80,8 @@ class GetApplicationRelease(
         // KMK -->
         /** Whether this is the lean no-MTL variant (release assets are prefixed "nomtl"). */
         val nomtl: Boolean = false,
+        /** Houri+ (custom build): only releases whose tag starts with this count (e.g. "h"). */
+        val tagPrefix: String? = null,
         // KMK <--
     )
 

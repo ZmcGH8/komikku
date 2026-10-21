@@ -76,6 +76,7 @@ import exh.log.EHLogLevel
 import exh.log.EnhancedFilePrinter
 import exh.log.XLogLogcatLogger
 import exh.log.xLogD
+import exh.source.ExhPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -227,6 +228,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         Injekt.get<LibraryPreferences>().dedupeChapterCounts().changes()
             .onEach { LibraryManga.dedupeChapterCounts = it }
             .launchIn(scope)
+
+        // Custom build: E-Hentai features are removed; keep them off even after restoring a backup
+        Injekt.get<ExhPreferences>().isHentaiEnabled().let { isHentaiEnabled ->
+            isHentaiEnabled.changes()
+                .onEach { if (it) isHentaiEnabled.set(false) }
+                .launchIn(scope)
+        }
         // KMK <--
 
         // Updates widget update

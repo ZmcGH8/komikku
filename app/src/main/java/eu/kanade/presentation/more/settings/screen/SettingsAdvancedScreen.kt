@@ -773,14 +773,9 @@ object SettingsAdvancedScreen : SearchableSettings {
         return Preference.PreferenceGroup(
             title = stringResource(SYMR.strings.developer_tools),
             preferenceItems = persistentListOf(
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = exhPreferences.isHentaiEnabled(),
-                    title = stringResource(SYMR.strings.toggle_hentai_features),
-                    subtitle = stringResource(SYMR.strings.toggle_hentai_features_summary),
-                    onValueChanged = {
-                        true
-                    },
-                ),
+                // KMK -->
+                // Custom build: E-Hentai features are removed, so their toggle is not shown
+                // KMK <--
                 Preference.PreferenceItem.SwitchPreference(
                     preference = sourcePreferences.enableSourceBlacklist(),
                     title = stringResource(SYMR.strings.enable_source_blacklist),

@@ -36,6 +36,10 @@ android {
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLastCommitTime = false)}\"")
         buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
         buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
+        // KMK -->
+        // Custom build: GitHub repo ("owner/name") the in-app updater checks; empty = official Komikku
+        buildConfigField("String", "UPDATER_REPO", "\"${project.findProperty("custom-repo") ?: ""}\"")
+        // KMK <--
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -77,6 +81,13 @@ android {
             initWith(release)
 
             applicationIdSuffix = ".beta"
+            // KMK -->
+            // Custom build: installs alongside Komikku with its own name
+            if (project.hasProperty("custom-app")) {
+                applicationIdSuffix = ".custom"
+                resValue("string", "app_name", "Komikku+")
+            }
+            // KMK <--
 
             versionNameSuffix = debug.versionNameSuffix
             signingConfig = debug.signingConfig

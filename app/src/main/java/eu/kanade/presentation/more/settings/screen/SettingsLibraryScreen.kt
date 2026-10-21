@@ -21,6 +21,7 @@ import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
 import eu.kanade.tachiyomi.ui.category.genre.SortTagScreen
+import eu.kanade.tachiyomi.ui.category.groups.CategoryGroupsScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableMap
@@ -99,6 +100,13 @@ object SettingsLibraryScreen : SearchableSettings {
                     ),
                     onClick = { navigator.push(CategoryScreen()) },
                 ),
+                // KMK -->
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.custom_category_groups),
+                    subtitle = stringResource(KMR.strings.custom_category_groups_summary),
+                    onClick = { navigator.push(CategoryGroupsScreen()) },
+                ),
+                // KMK <--
                 Preference.PreferenceItem.ListPreference(
                     preference = libraryPreferences.defaultCategory(),
                     entries = ids.zip(labels).toMap().toImmutableMap(),

@@ -249,4 +249,18 @@
     <string name="pref_custom_hidden_match_detail">%1$s · in your library as %2$s</string>
     <string name="action_custom_show_again">Show again</string>
     <string name="action_sort_popularity">Popularity (Avg Readers)</string>
+    <string name="custom_group_no_tags">No tags</string>
+    <string name="custom_group_by_category_group">Categories</string>
+    <string name="custom_group_by_sub_category">Sub-categories</string>
+    <string name="custom_group_by_tag">Tags</string>
+    <string name="custom_category_groups">Categories (broad)</string>
+    <string name="custom_category_groups_summary">Group your categories under broad categories; they become its sub-categories</string>
+    <string name="custom_category_groups_empty">No broad categories yet. Tap + to add one, then choose its sub-categories</string>
+    <string name="custom_category_group_add">Add category</string>
+    <string name="custom_category_group_rename">Rename category</string>
+    <string name="custom_category_group_delete">Delete category</string>
+    <string name="custom_category_group_delete_confirmation">Delete \"%1$s\"? Its sub-categories and their entries are kept</string>
+    <string name="custom_category_group_choose">Sub-categories of %1$s</string>
+    <string name="custom_category_group_none">No sub-categories</string>
+    <string name="custom_category_group_other">Also in %1$s</string>
 </resources>

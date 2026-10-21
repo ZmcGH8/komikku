@@ -12,6 +12,15 @@ object LibraryGroup {
     const val BY_TRACK_STATUS = 3
     const val UNGROUPED = 4
 
+    // KMK -->
+    // Custom build (high values to stay clear of upstream)
+    /** Tabs for broad categories ([tachiyomi.domain.category.model.CategoryGroup]) */
+    const val BY_CATEGORY_GROUP = 20
+
+    /** One tab per tag */
+    const val BY_TAG = 21
+    // KMK <--
+
     fun groupTypeStringRes(type: Int): StringResource {
         return when (type) {
             BY_STATUS -> MR.strings.status

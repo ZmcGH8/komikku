@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.map
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.category.model.CategoryGroup
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.model.LibrarySort
@@ -424,6 +425,9 @@ private fun groupTypeDrawableRes(type: Int): Int {
         LibraryGroup.BY_TRACK_STATUS -> R.drawable.ic_sync_24dp
         LibraryGroup.BY_SOURCE -> R.drawable.ic_browse_filled_24dp
         LibraryGroup.UNGROUPED -> R.drawable.ic_ungroup_24dp
+        // KMK -->
+        LibraryGroup.BY_CATEGORY_GROUP -> R.drawable.ic_folder_24dp
+        // KMK <--
         else -> R.drawable.ic_label_24dp
     }
 }
@@ -435,9 +439,21 @@ private fun ColumnScope.GroupPage(
     hasCategories: Boolean,
 ) {
     val trackers by screenModel.trackersFlow.collectAsState()
-    val groups = remember(hasCategories, trackers) {
+    // KMK -->
+    val categoryGroups by screenModel.libraryPreferences.categoryGroups().collectAsState()
+    val hasCategoryGroups = categoryGroups.isNotBlank() && CategoryGroup.decode(categoryGroups).isNotEmpty()
+    // KMK <--
+    val groups = remember(hasCategories, trackers/* KMK --> */, hasCategoryGroups/* KMK <-- */) {
         buildList {
+            // KMK -->
+            if (hasCategoryGroups || screenModel.grouping == LibraryGroup.BY_CATEGORY_GROUP) {
+                add(LibraryGroup.BY_CATEGORY_GROUP)
+            }
+            // KMK <--
             add(LibraryGroup.BY_DEFAULT)
+            // KMK -->
+            add(LibraryGroup.BY_TAG)
+            // KMK <--
             add(LibraryGroup.BY_SOURCE)
             add(LibraryGroup.BY_STATUS)
             if (trackers.isNotEmpty()) {
@@ -449,7 +465,14 @@ private fun ColumnScope.GroupPage(
         }.map {
             GroupMode(
                 it,
-                LibraryGroup.groupTypeStringRes(it),
+                // KMK -->
+                when {
+                    it == LibraryGroup.BY_CATEGORY_GROUP -> KMR.strings.custom_group_by_category_group
+                    it == LibraryGroup.BY_TAG -> KMR.strings.custom_group_by_tag
+                    it == LibraryGroup.BY_DEFAULT && hasCategoryGroups -> KMR.strings.custom_group_by_sub_category
+                    else -> LibraryGroup.groupTypeStringRes(it)
+                },
+                // KMK <--
                 groupTypeDrawableRes(it),
             )
         }.toImmutableList()

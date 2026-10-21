@@ -99,12 +99,26 @@ class MergedSource : HttpSource() {
             // Custom build: take the status from the merged source that has reached the highest chapter,
             // so an official source's hiatus doesn't override a scan that is still releasing.
             val infoManga = dbManga ?: mergedManga.toSManga()
-            val statusFromFurthestSource = mangaReferences
+            val furthestSource = mangaReferences
                 .filter { it.mangaSourceId != MERGED_SOURCE_ID }
                 .mapNotNull { getManga.await(it.mangaUrl, it.mangaSourceId) }
                 .maxByOrNull { child ->
                     getChaptersByMangaId.await(child.id).maxOfOrNull { it.chapterNumber } ?: -1.0
                 }
+            // Refresh that source's details so its status is current
+            val statusFromFurthestSource = furthestSource?.let { child ->
+                val refreshed = try {
+                    updateMangaFromRemote(
+                        source = sourceManager.getOrStub(child.source),
+                        manga = child,
+                        fetchDetails = true,
+                    ).getOrThrow().manga
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    null
+                }
+                refreshed ?: child
+            }
                 ?.status
                 ?.toInt()
             infoManga.copy(

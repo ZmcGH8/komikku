@@ -20,7 +20,7 @@ data class LibrarySort(
         override val flag: Long,
     ) : FlagWithMask {
 
-        override val mask: Long = 0b00111100L
+        override val mask: Long = /* KMK --> */ 0b10111100L /* KMK <-- */
 
         data object Alphabetical : Type(0b00000000)
         data object LastRead : Type(0b00000100)
@@ -36,6 +36,18 @@ data class LibrarySort(
         // SY -->
         data object TagList : Type(0b00100100)
         // SY <--
+
+        // KMK -->
+        // Houri+ (custom build): sort types use the otherwise unused top bit so upstream can keep adding types
+        /** "Avg Readers" from the entry's description */
+        data object Popularity : Type(0b10000000)
+        data object Author : Type(0b10000100)
+        data object Scanlator : Type(0b10001000)
+        data object Artist : Type(0b10001100)
+
+        /** Studio from the "Credits" in the entry's description */
+        data object Studio : Type(0b10010000)
+        // KMK <--
 
         companion object {
             fun valueOf(flag: Long): Type {
@@ -83,6 +95,7 @@ data class LibrarySort(
                 Type.DateAdded,
                 Type.TrackerMean,
                 /* SY -->*/ Type.TagList, /* SY <--*/
+                /* KMK -->*/ Type.Popularity, Type.Author, Type.Artist, Type.Studio, Type.Scanlator, /* KMK <--*/
                 Type.Random,
             )
         }
@@ -113,6 +126,13 @@ data class LibrarySort(
                     "TRACKER_MEAN" -> Type.TrackerMean
                     // SY -->
                     "TAG_LIST" -> Type.TagList
+                    // KMK -->
+                    "POPULARITY" -> Type.Popularity
+                    "AUTHOR" -> Type.Author
+                    "SCANLATOR" -> Type.Scanlator
+                    "ARTIST" -> Type.Artist
+                    "STUDIO" -> Type.Studio
+                    // KMK <--
                     // SY <--
                     "RANDOM" -> Type.Random
                     else -> Type.Alphabetical
@@ -138,6 +158,13 @@ data class LibrarySort(
             Type.TrackerMean -> "TRACKER_MEAN"
             // SY -->
             Type.TagList -> "TAG_LIST"
+            // KMK -->
+            Type.Popularity -> "POPULARITY"
+            Type.Author -> "AUTHOR"
+            Type.Scanlator -> "SCANLATOR"
+            Type.Artist -> "ARTIST"
+            Type.Studio -> "STUDIO"
+            // KMK <--
             // SY <--
             Type.Random -> "RANDOM"
         }

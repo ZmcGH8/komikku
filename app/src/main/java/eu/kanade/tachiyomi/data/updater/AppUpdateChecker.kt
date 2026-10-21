@@ -96,7 +96,11 @@ class AppUpdateChecker(
 val GITHUB_REPO: String by lazy { getGithubRepo() }
 
 fun getGithubRepo(peekIntoPreview: Boolean = false): String =
-    if (isPreviewBuildType || peekIntoPreview) {
+    // KMK -->
+    if (BuildConfig.UPDATER_REPO.isNotEmpty()) {
+        BuildConfig.UPDATER_REPO
+    } else if (isPreviewBuildType || peekIntoPreview) {
+        // KMK <--
         "komikku-app/komikku-preview"
     } else {
         "komikku-app/komikku"

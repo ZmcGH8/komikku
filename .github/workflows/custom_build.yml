@@ -1,0 +1,159 @@
+# KMK -->
+# Custom build (Komikku+): keeps the "custom" branch rebased on the latest official Komikku,
+# builds a signed APK and publishes it as a GitHub release the in-app updater can find.
+# Build and rebase logs are pushed to the "ci-logs" branch so problems can be fixed without Actions access.
+name: Custom build
+
+on:
+  push:
+    branches:
+      - custom
+  workflow_dispatch:
+  schedule:
+    # Every day at 09:17 UTC: pick up new Komikku commits
+    - cron: '17 9 * * *'
+
+concurrency:
+  group: custom-build
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Rebase on official Komikku
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.rebase.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: custom
+          fetch-depth: 0
+
+      - name: Rebase custom branch onto komikku-app/komikku master
+        id: rebase
+        run: |
+          set -e
+          git config user.name "komikku-plus-bot"
+          git config user.email "komikku-plus-bot@users.noreply.github.com"
+          git remote add upstream https://github.com/komikku-app/komikku.git
+          git fetch upstream master
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "Already up to date with Komikku."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git rebase upstream/master > rebase.log 2>&1; then
+            git status >> rebase.log 2>&1 || true
+            git diff --name-only --diff-filter=U >> rebase.log 2>&1 || true
+            git rebase --abort
+            echo "::error::Rebase onto Komikku hit a conflict; the custom changes need a manual fix."
+            exit 1
+          fi
+          git push --force-with-lease origin HEAD:custom
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the rebase log
+        if: failure()
+        run: |
+          mkdir -p /tmp/log && cp rebase.log /tmp/log/ 2>/dev/null || echo "no rebase log" > /tmp/log/rebase.log
+          cd /tmp/log
+          git init -q -b ci-logs
+          git config user.name "komikku-plus-bot"
+          git config user.email "komikku-plus-bot@users.noreply.github.com"
+          echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > result.txt
+          echo "result: rebase failed" >> result.txt
+          git add -A && git commit -qm "rebase failed (run ${{ github.run_id }})"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
+
+  build:
+    name: Build Komikku+
+    needs: [sync]
+    if: |
+      always() &&
+      (github.event_name == 'push' || needs.sync.outputs.changed == 'true')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: custom
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install the fixed signing key
+        env:
+          SIGNING_KEY: ${{ secrets.CUSTOM_SIGNING_KEY }}
+        run: |
+          set -e
+          mkdir -p ~/.android
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "$SIGNING_KEY" | base64 -d > ~/.android/debug.keystore
+          elif [ -f custom/signing.keystore ]; then
+            cp custom/signing.keystore ~/.android/debug.keystore
+          else
+            echo "::error::No signing key found (CUSTOM_SIGNING_KEY secret or custom/signing.keystore)."
+            exit 1
+          fi
+
+      - name: Build APK
+        run: |
+          set -o pipefail
+          ./gradlew spotlessApply --console=plain 2>&1 | tee build.log
+          ./gradlew assemblePreview -Pcustom-app -Pcustom-repo=${{ github.repository }} -Penable-updater --console=plain 2>&1 | tee -a build.log
+
+      - name: Unit tests and migration check
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew testPreviewUnitTest verifySqlDelightMigration --console=plain 2>&1 | tee -a build.log
+
+      - name: Name the APK
+        id: apk
+        run: |
+          set -e
+          count=$(git rev-list --count HEAD)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          mv app/build/outputs/apk/preview/app-universal-preview.apk "Komikku-plus-r$count.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Komikku-plus-r${{ steps.apk.outputs.count }}
+          path: ./*.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: r${{ steps.apk.outputs.count }}
+          name: Komikku+ r${{ steps.apk.outputs.count }}
+          target_commitish: ${{ steps.apk.outputs.sha }}
+          body: |
+            Komikku+ build from commit ${{ steps.apk.outputs.sha }}, based on the latest official Komikku.
+          files: ./*.apk
+
+      - name: Save the build log
+        if: always()
+        run: |
+          mkdir -p /tmp/log
+          cp build.log /tmp/log/ 2>/dev/null || echo "no build log" > /tmp/log/build.log
+          grep -E "^e: |error:|FAILED|What went wrong|BUILD (SUCCESSFUL|FAILED)" -A3 /tmp/log/build.log > /tmp/log/errors.txt || true
+          echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > /tmp/log/result.txt
+          echo "commit: $(git rev-parse HEAD)" >> /tmp/log/result.txt
+          echo "result: ${{ job.status }}" >> /tmp/log/result.txt
+          cd /tmp/log
+          git init -q -b ci-logs
+          git config user.name "komikku-plus-bot"
+          git config user.email "komikku-plus-bot@users.noreply.github.com"
+          git add -A && git commit -qm "build ${{ job.status }} (run ${{ github.run_id }})"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
+# KMK <--

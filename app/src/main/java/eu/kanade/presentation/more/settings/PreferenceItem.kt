@@ -1,0 +1,252 @@
+package eu.kanade.presentation.more.settings
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.more.settings.widget.ConnectionPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.InfoWidget
+import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.MultiSelectListPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
+import eu.kanade.presentation.more.settings.widget.PrefsVerticalPadding
+import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.TitleFontSize
+import eu.kanade.presentation.more.settings.widget.TrackingPreferenceWidget
+import kotlinx.coroutines.launch
+import tachiyomi.presentation.core.components.BaseSliderItem
+import tachiyomi.presentation.core.util.collectAsState
+
+val LocalPreferenceHighlighted = compositionLocalOf(structuralEqualityPolicy()) { false }
+val LocalPreferenceMinHeight = compositionLocalOf(structuralEqualityPolicy()) { 56.dp }
+// KMK -->
+/**
+ * False inside a row that failed its gates but stays visible via `grayOut = true`.
+ * Widgets read this to disable their own click targets; [StatusWrapper] dims the row.
+ */
+val LocalPreferenceEnabled = compositionLocalOf(structuralEqualityPolicy()) { true }
+private const val SOFT_DISABLED_ALPHA = 0.38f
+// KMK <--
+
+@Composable
+fun StatusWrapper(
+    item: Preference.PreferenceItem<*, *>,
+    highlightKey: String?,
+    content: @Composable () -> Unit,
+) {
+    val visible = item.isVisible()
+    // KMK -->
+    val interactive = item.isInteractive()
+    // KMK <--
+    val highlighted = item.title == highlightKey
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+        content = {
+            CompositionLocalProvider(
+                LocalPreferenceHighlighted provides highlighted,
+                // KMK -->
+                LocalPreferenceEnabled provides interactive,
+                // KMK <--
+                content = {
+                    // KMK -->
+                    if (interactive) {
+                        content()
+                    } else {
+                        Box(modifier = Modifier.alpha(SOFT_DISABLED_ALPHA)) {
+                            content()
+                        }
+                    }
+                    // KMK <--
+                },
+            )
+        },
+    )
+}
+
+@Composable
+internal fun PreferenceItem(
+    item: Preference.PreferenceItem<*, *>,
+    highlightKey: String?,
+) {
+    val scope = rememberCoroutineScope()
+    // KMK --> standalone click targets outside BasePreferenceWidget read this directly.
+    val interactive = item.isInteractive()
+    // KMK <--
+    StatusWrapper(
+        item = item,
+        highlightKey = highlightKey,
+    ) {
+        when (item) {
+            is Preference.PreferenceItem.SwitchPreference -> {
+                val value by item.preference.collectAsState()
+                SwitchPreferenceWidget(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    icon = item.icon,
+                    checked = value,
+                    onCheckedChanged = { newValue ->
+                        scope.launch {
+                            if (item.onValueChanged(newValue)) {
+                                item.preference.set(newValue)
+                            }
+                        }
+                    },
+                )
+            }
+            is Preference.PreferenceItem.SliderPreference -> {
+                BaseSliderItem(
+                    value = item.value,
+                    valueRange = item.valueRange,
+                    steps = item.steps,
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    valueString = item.valueString.takeUnless { it.isNullOrEmpty() } ?: item.value.toString(),
+                    onChange = {
+                        // KMK --> BaseSliderItem has no enabled param; guard here.
+                        if (interactive) {
+                            scope.launch {
+                                item.onValueChanged(it)
+                            }
+                        }
+                        // KMK <--
+                    },
+                    titleStyle = MaterialTheme.typography.titleLarge.copy(fontSize = TitleFontSize),
+                    modifier = Modifier.padding(
+                        horizontal = PrefsHorizontalPadding,
+                        vertical = PrefsVerticalPadding,
+                    ),
+                )
+            }
+            is Preference.PreferenceItem.ListPreference<*> -> {
+                val value by item.preference.collectAsState()
+                ListPreferenceWidget(
+                    value = value,
+                    title = item.title,
+                    subtitle = item.internalSubtitleProvider(value, item.entries),
+                    icon = item.icon,
+                    entries = item.entries,
+                    onValueChange = { newValue ->
+                        scope.launch {
+                            if (item.internalOnValueChanged(newValue!!)) {
+                                item.internalSet(newValue)
+                            }
+                        }
+                    },
+                )
+            }
+            is Preference.PreferenceItem.BasicListPreference -> {
+                ListPreferenceWidget(
+                    value = item.value,
+                    title = item.title,
+                    subtitle = item.subtitleProvider(item.value, item.entries),
+                    icon = item.icon,
+                    entries = item.entries,
+                    onValueChange = { scope.launch { item.onValueChanged(it) } },
+                )
+            }
+            is Preference.PreferenceItem.MultiSelectListPreference -> {
+                val values by item.preference.collectAsState()
+                MultiSelectListPreferenceWidget(
+                    preference = item,
+                    values = values,
+                    onValuesChange = { newValues ->
+                        scope.launch {
+                            if (item.onValueChanged(newValues)) {
+                                item.preference.set(newValues.toMutableSet())
+                            }
+                        }
+                    },
+                )
+            }
+            is Preference.PreferenceItem.TextPreference -> {
+                TextPreferenceWidget(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    icon = item.icon,
+                    onPreferenceClick = item.onClick,
+                )
+            }
+            is Preference.PreferenceItem.EditTextPreference -> {
+                val values by item.preference.collectAsState()
+                EditTextPreferenceWidget(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    icon = item.icon,
+                    value = values,
+                    validator = item.validator,
+                    multiline = item.multiline,
+                    allowEmpty = item.allowEmpty,
+                    onConfirm = {
+                        val accepted = item.onValueChanged(it)
+                        if (accepted) item.preference.set(it)
+                        accepted
+                    },
+                )
+            }
+            is Preference.PreferenceItem.TrackerPreference -> {
+                val isLoggedIn by item.tracker.let { tracker ->
+                    tracker.isLoggedInFlow.collectAsState(tracker.isLoggedIn)
+                }
+                TrackingPreferenceWidget(
+                    tracker = item.tracker,
+                    checked = isLoggedIn,
+                    // KMK --> standalone widget: guard here (see LocalPreferenceEnabled).
+                    onClick = {
+                        if (interactive) {
+                            if (isLoggedIn) item.logout() else item.login()
+                        }
+                    },
+                    isPriority = item.isPriority,
+                    onLongClick = item.onLongClick?.takeIf { interactive && isLoggedIn }?.let { longClick ->
+                        { longClick() }
+                    },
+                    // KMK --> swipe always reaches logout, even when the row reads as
+                    // logged out; without it there is no way to clear stale credentials.
+                    onSwipeLogout = if (interactive) item.logout else null,
+                    // KMK <--
+                )
+            }
+            // AM (CONNECTIONS) -->
+            is Preference.PreferenceItem.ConnectionPreference -> {
+                val isLoggedIn by item.service.isLoggedInFlow.collectAsState(item.service.isLogged)
+                ConnectionPreferenceWidget(
+                    service = item.service,
+                    checked = isLoggedIn,
+                    // KMK --> standalone widget: guard here (see LocalPreferenceEnabled).
+                    onClick = {
+                        if (interactive) {
+                            if (isLoggedIn) item.openSettings() else item.login()
+                        }
+                    },
+                    // KMK <--
+                    subtitle = item.subtitle,
+                )
+            }
+            // <-- AM (CONNECTIONS)
+            is Preference.PreferenceItem.InfoPreference -> {
+                InfoWidget(text = item.title)
+            }
+            is Preference.PreferenceItem.CustomPreference -> {
+                item.content()
+            }
+        }
+    }
+}

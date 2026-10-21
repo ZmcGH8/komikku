@@ -1,0 +1,176 @@
+import kotlin.Long;
+import kotlin.collections.List;
+
+CREATE TABLE categories(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort INTEGER NOT NULL,
+    flags INTEGER NOT NULL,
+    manga_order TEXT AS List<Long> NOT NULL,
+    -- KMK -->
+    hidden INTEGER NOT NULL DEFAULT 0,
+    parent_id INTEGER NOT NULL DEFAULT 0,
+    -- KMK <--
+    -- KMK --> 0 means "unknown, predates tracking"; sorting falls back to id
+    -- for those, so legacy rows are not all stamped with the migration date.
+    date_added INTEGER NOT NULL DEFAULT 0,
+    date_modified INTEGER NOT NULL DEFAULT 0,
+    -- KMK --> NULL means this category is not bound to any tracker status, so a
+    -- status change never adds to or removes from it.
+    track_status INTEGER,
+    -- KMK <--
+    -- KMK --> Days between library updates for entries in this category.
+    -- NULL inherits the global interval, which is how every existing category
+    -- must behave after this lands. Days rather than hours because the
+    -- request is phrased in days and FetchInterval already works in days.
+    update_interval INTEGER
+    -- KMK <--
+);
+
+-- Insert system category
+INSERT OR IGNORE INTO categories(_id, name, sort, flags, manga_order, hidden, parent_id) VALUES (0, "", -1, 0, "", 0, 0);
+-- Disallow deletion of default category
+CREATE TRIGGER IF NOT EXISTS system_category_delete_trigger BEFORE DELETE
+ON categories
+BEGIN SELECT CASE
+    WHEN old._id <= 0 THEN
+        RAISE(ABORT, "System category can't be deleted")
+    END;
+END;
+
+getCategory:
+SELECT _id,name,sort,flags,hidden,parent_id,date_added,date_modified,track_status,update_interval
+FROM categories
+WHERE _id = :id
+LIMIT 1;
+
+getCategories:
+SELECT
+_id AS id,
+name,
+sort AS `order`,
+flags,
+-- KMK -->
+hidden,
+parent_id,
+date_added,
+date_modified,
+track_status,
+update_interval
+-- KMK <--
+FROM categories
+ORDER BY sort;
+
+getCategoriesByMangaId:
+SELECT
+C._id AS id,
+C.name,
+C.sort AS `order`,
+C.flags,
+-- KMK -->
+C.hidden,
+C.parent_id,
+C.date_added,
+C.date_modified,
+C.track_status,
+C.update_interval
+-- KMK <--
+FROM categories C
+JOIN mangas_categories MC
+ON C._id = MC.category_id
+WHERE MC.manga_id = :mangaId;
+
+-- KMK -->
+getSubcategories:
+SELECT
+_id AS id,
+name,
+sort AS `order`,
+flags,
+hidden,
+parent_id,
+date_added,
+date_modified,
+track_status,
+update_interval
+FROM categories
+WHERE parent_id = :parentId
+ORDER BY sort;
+
+getTopLevelCategories:
+SELECT
+_id AS id,
+name,
+sort AS `order`,
+flags,
+hidden,
+parent_id,
+date_added,
+date_modified,
+track_status,
+update_interval
+FROM categories
+WHERE parent_id = 0
+ORDER BY sort;
+
+getMangaIdsInCategoryTree:
+SELECT MC.manga_id
+FROM mangas_categories MC
+JOIN categories C ON C._id = MC.category_id
+WHERE C._id = :categoryId OR C.parent_id = :categoryId;
+
+deleteOrphanedSubcategories:
+DELETE FROM categories
+WHERE parent_id != 0 AND parent_id NOT IN (SELECT _id FROM categories);
+-- KMK <--
+
+insert:
+INSERT INTO categories(name, sort, flags, manga_order, hidden, parent_id, date_added, date_modified)
+VALUES (:name, :order, :flags, "", :hidden, :parentId, strftime('%s', 'now'), strftime('%s', 'now'));
+
+delete:
+DELETE FROM categories
+WHERE _id = :categoryId;
+
+update:
+UPDATE categories
+SET name = coalesce(:name, name),
+    sort = coalesce(:order, sort),
+    flags = coalesce(:flags, flags),
+    -- KMK -->
+    hidden = coalesce(:hidden, hidden),
+    parent_id = coalesce(:parentId, parent_id),
+    -- Only a rename counts: reordering and flag toggles go through this same
+    -- statement and would otherwise dominate a "date modified" sort.
+    date_modified = CASE
+        WHEN :name IS NOT NULL AND :name != name THEN strftime('%s', 'now')
+        ELSE date_modified
+    END
+    -- KMK <--
+WHERE _id = :categoryId;
+
+updateAllFlags:
+UPDATE categories SET
+flags = coalesce(?, flags);
+
+-- KMK --> Deliberately not folded into `update`: that statement's partial-update idiom is
+-- coalesce(:param, col), which cannot express "unbind this category" because NULL would
+-- mean "leave it alone" rather than "set it to nothing". Binding and unbinding need their
+-- own statement that assigns the value unconditionally.
+-- KMK <--
+-- KMK -->
+updateTrackStatus:
+UPDATE categories
+SET track_status = :trackStatus
+WHERE _id = :categoryId;
+
+-- Same reasoning as updateTrackStatus: assigning unconditionally is what lets NULL clear the
+-- interval back to inheriting the global one.
+updateUpdateInterval:
+UPDATE categories
+SET update_interval = :updateInterval
+WHERE _id = :categoryId;
+-- KMK <--
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();

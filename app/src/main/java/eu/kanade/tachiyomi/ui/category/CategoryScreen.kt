@@ -1,0 +1,166 @@
+package eu.kanade.tachiyomi.ui.category
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.util.fastMap
+import cafe.adriel.voyager.core.model.rememberScreenModel
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.category.CategoryScreen
+import eu.kanade.presentation.category.components.CategoryCreateDialog
+import eu.kanade.presentation.category.components.CategoryDeleteDialog
+import eu.kanade.presentation.category.components.CategoryMergeDialog
+import eu.kanade.presentation.category.components.CategoryMoveDialog
+import eu.kanade.presentation.category.components.CategoryRenameDialog
+import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.collectLatest
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.screens.LoadingScreen
+
+class CategoryScreen : Screen() {
+
+    @Composable
+    override fun Content() {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+        val screenModel = rememberScreenModel { CategoryScreenModel() }
+
+        val state by screenModel.state.collectAsState()
+
+        if (state is CategoryScreenState.Loading) {
+            LoadingScreen()
+            return
+        }
+
+        val successState = state as CategoryScreenState.Success
+
+        CategoryScreen(
+            state = successState,
+            onClickCreate = { screenModel.showDialog(CategoryDialog.Create) },
+            onClickRename = { screenModel.showDialog(CategoryDialog.Rename(it)) },
+            onClickDelete = { screenModel.showDialog(CategoryDialog.Delete(it)) },
+            onChangeOrder = screenModel::changeOrder,
+            // KMK -->
+            onClickHide = screenModel::hideCategory,
+            onCreateSubcategory = { screenModel.showDialog(CategoryDialog.CreateSubcategory(it)) },
+            onReparentSubcategory = screenModel::reparentSubcategory,
+            searchQuery = successState.searchQuery,
+            onSearchQuery = screenModel::setSearchQuery,
+            collapsedIds = successState.collapsedIds,
+            onToggleCollapsed = screenModel::toggleCollapsed,
+            onExpandAll = screenModel::expandAll,
+            onCollapseAll = screenModel::collapseAll,
+            sortMode = successState.sortMode,
+            onSortMode = screenModel::setSortMode,
+            mangaCounts = successState.mangaCounts,
+            selectMode = successState.selectMode,
+            selectedIds = successState.selectedIds,
+            onToggleSelectMode = screenModel::toggleSelectMode,
+            onToggleSelection = screenModel::toggleSelection,
+            onSelectVisible = screenModel::selectIds,
+            onBulkHide = { screenModel.bulkSetHidden(true) },
+            onBulkShow = { screenModel.bulkSetHidden(false) },
+            onShowMoveDialog = {
+                screenModel.showDialog(CategoryDialog.MoveSubcategories(successState.selectedIds.toList()))
+            },
+            onShowMergeDialog = {
+                screenModel.showDialog(CategoryDialog.MergeSubcategories(successState.selectedIds.toList()))
+            },
+            onShowDeleteMany = {
+                screenModel.showDialog(CategoryDialog.DeleteMany(successState.selectedIds.toList()))
+            },
+            onSelectTrackStatus = { category, status ->
+                screenModel.setCategoryTrackStatus(category.id, status)
+            },
+            onSelectUpdateInterval = { category, days ->
+                screenModel.setCategoryUpdateInterval(category.id, days)
+            },
+            onSelectReaderMode = { category, flag ->
+                screenModel.setCategoryReaderMode(category, flag)
+            },
+            readerModeFor = screenModel::categoryReaderMode,
+            // KMK <--
+            navigateUp = navigator::pop,
+        )
+
+        when (val dialog = successState.dialog) {
+            null -> {}
+            CategoryDialog.Create -> {
+                CategoryCreateDialog(
+                    onDismissRequest = screenModel::dismissDialog,
+                    onCreate = screenModel::createCategory,
+                    categories = successState.categories.fastMap { it.name }.toImmutableList(),
+                )
+            }
+            // KMK -->
+            is CategoryDialog.CreateSubcategory -> {
+                CategoryCreateDialog(
+                    onDismissRequest = screenModel::dismissDialog,
+                    onCreate = { name -> screenModel.createSubcategory(name, dialog.parent.id) },
+                    categories = successState.categories.filter { it.parentId == dialog.parent.id }.fastMap { it.name }.toImmutableList(),
+                    title = "Create subcategory in ${dialog.parent.name}",
+                    extraMessage = "Subcategory will be inside \"${dialog.parent.name}\" and follows all library filter rules. \"All\" shows content from all subcategories.",
+                )
+            }
+            // KMK <--
+            is CategoryDialog.Rename -> {
+                CategoryRenameDialog(
+                    onDismissRequest = screenModel::dismissDialog,
+                    onRename = { screenModel.renameCategory(dialog.category, it) },
+                    categories = successState.categories.fastMap { it.name }.toImmutableList(),
+                    category = dialog.category.name,
+                )
+            }
+            is CategoryDialog.Delete -> {
+                CategoryDeleteDialog(
+                    onDismissRequest = screenModel::dismissDialog,
+                    onDelete = { screenModel.deleteCategory(dialog.category.id) },
+                    category = dialog.category.name,
+                )
+            }
+            // KMK -->
+            is CategoryDialog.MoveSubcategories -> {
+                val parents = successState.categories.filter { it.parentId == 0L }.toImmutableList()
+                CategoryMoveDialog(
+                    parents = parents,
+                    onDismissRequest = screenModel::dismissDialog,
+                    onConfirm = { parentId -> screenModel.bulkMove(dialog.ids, parentId) },
+                )
+            }
+            is CategoryDialog.MergeSubcategories -> {
+                val byId = successState.categories.associateBy { it.id }
+                CategoryMergeDialog(
+                    candidates = dialog.ids.mapNotNull { byId[it] }.toImmutableList(),
+                    onDismissRequest = screenModel::dismissDialog,
+                    onConfirm = { targetId ->
+                        screenModel.mergeInto(targetId, dialog.ids.filter { it != targetId })
+                    },
+                )
+            }
+            is CategoryDialog.DeleteMany -> {
+                CategoryDeleteDialog(
+                    onDismissRequest = screenModel::dismissDialog,
+                    onDelete = { screenModel.bulkDelete(dialog.ids) },
+                    category = "",
+                    title = stringResource(KMR.strings.category_manager_delete_many_title),
+                    text = stringResource(KMR.strings.category_manager_delete_many, dialog.ids.size),
+                )
+            }
+            // KMK <--
+        }
+
+        LaunchedEffect(Unit) {
+            screenModel.events.collectLatest { event ->
+                if (event is CategoryEvent.LocalizedMessage) {
+                    context.toast(event.stringRes)
+                }
+            }
+        }
+    }
+}

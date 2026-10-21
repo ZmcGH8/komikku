@@ -1,0 +1,171 @@
+package eu.kanade.presentation.theme
+
+import android.content.Context
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import com.materialkolor.DynamicMaterialExpressiveTheme // TODO: Consider switching to a stable Material3 Compose library when materialkolor stabilizes or migrate to official Material3 dynamic color APIs
+import eu.kanade.domain.ui.model.AppTheme
+import eu.kanade.presentation.theme.colorscheme.BaseColorScheme
+import eu.kanade.presentation.theme.colorscheme.CatppuccinColorScheme
+import eu.kanade.presentation.theme.colorscheme.CloudflareColorScheme
+import eu.kanade.presentation.theme.colorscheme.CottoncandyColorScheme
+import eu.kanade.presentation.theme.colorscheme.CustomColorScheme
+import eu.kanade.presentation.theme.colorscheme.DoomColorScheme
+import eu.kanade.presentation.theme.colorscheme.GreenAppleColorScheme
+import eu.kanade.presentation.theme.colorscheme.LavenderColorScheme
+import eu.kanade.presentation.theme.colorscheme.MatrixColorScheme
+import eu.kanade.presentation.theme.colorscheme.MidnightDuskColorScheme
+import eu.kanade.presentation.theme.colorscheme.MochaColorScheme
+import eu.kanade.presentation.theme.colorscheme.MonetColorScheme
+import eu.kanade.presentation.theme.colorscheme.MonochromeColorScheme
+import eu.kanade.presentation.theme.colorscheme.NordColorScheme
+import eu.kanade.presentation.theme.colorscheme.SapphireColorScheme
+import eu.kanade.presentation.theme.colorscheme.StrawberryColorScheme
+import eu.kanade.presentation.theme.colorscheme.TachiyomiColorScheme
+import eu.kanade.presentation.theme.colorscheme.TakoColorScheme
+import eu.kanade.presentation.theme.colorscheme.TealTurqoiseColorScheme
+import eu.kanade.presentation.theme.colorscheme.TidalWaveColorScheme
+import eu.kanade.presentation.theme.colorscheme.YinYangColorScheme
+import eu.kanade.presentation.theme.colorscheme.YotsubaColorScheme
+import eu.kanade.presentation.theme.colorscheme.rememberWallpaperSeed
+import mihon.app.di.globalAppGraph
+
+@Composable
+fun TachiyomiTheme(
+    appTheme: AppTheme? = null,
+    amoled: Boolean? = null,
+    content: @Composable () -> Unit,
+) {
+    val uiPreferences = globalAppGraph.uiPreferences
+    BaseTachiyomiTheme(
+        appTheme = appTheme ?: uiPreferences.appTheme().get(),
+        isAmoled = amoled ?: uiPreferences.themeDarkAmoled().get(),
+        content = content,
+    )
+}
+
+// KMK -->
+/** Theme based on Cover */
+@Composable
+fun TachiyomiTheme(
+    seedColor: Color?,
+    appTheme: AppTheme? = null,
+    amoled: Boolean? = null,
+    typography: Typography = MaterialTheme.typography,
+    content: @Composable () -> Unit,
+) {
+    if (seedColor == null) {
+        TachiyomiTheme(appTheme, amoled, content)
+    } else {
+        val uiPreferences = globalAppGraph.uiPreferences
+        val isAmoled = amoled ?: uiPreferences.themeDarkAmoled().get()
+        DynamicMaterialExpressiveTheme(
+            seedColor = seedColor,
+            isAmoled = isAmoled,
+            style = uiPreferences.themeCoverBasedStyle().get(),
+            typography = typography,
+            animate = true,
+            content = content,
+        )
+    }
+}
+// KMK <--
+
+@Composable
+fun TachiyomiPreviewTheme(
+    appTheme: AppTheme = AppTheme.DEFAULT,
+    isAmoled: Boolean = false,
+    content: @Composable () -> Unit,
+) = BaseTachiyomiTheme(appTheme, isAmoled, content)
+
+@Composable
+private fun BaseTachiyomiTheme(
+    appTheme: AppTheme,
+    isAmoled: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isDark = isSystemInDarkTheme()
+    // Only Monet below Android 12 has to sample the wallpaper for a seed, and that runs off the main
+    // thread. Keying on it is what lets the scheme settle onto the wallpaper's own colours once the
+    // sample lands; without the key the first-composition fallback would stick for the session.
+    val wallpaperSeed = rememberWallpaperSeed(appTheme)
+    // Monet and CUSTOM are seeded from live system state (wallpaper colours, the user's
+    // accent). Re-resolving only when the enum changed left the app showing the colours
+    // captured at composition time, so a wallpaper or accent change stayed invisible
+    // until the process restarted - the one thing a dynamic theme must not do.
+    val scheme = remember(configuration, appTheme, isDark, isAmoled, wallpaperSeed) {
+        getThemeColorScheme(
+            context = context,
+            appTheme = appTheme,
+            isDark = isDark,
+            isAmoled = isAmoled,
+            wallpaperSeed = wallpaperSeed,
+        )
+    }
+    MaterialTheme(
+        colorScheme = scheme,
+        content = content,
+    )
+}
+
+private fun getThemeColorScheme(
+    context: Context,
+    appTheme: AppTheme,
+    isDark: Boolean,
+    isAmoled: Boolean,
+    wallpaperSeed: Color? = null,
+): ColorScheme {
+    val colorScheme = when (appTheme) {
+        AppTheme.MONET -> {
+            MonetColorScheme(context, wallpaperSeed, isAmoled)
+        }
+        // KMK -->
+        AppTheme.CUSTOM -> {
+            val uiPreferences = globalAppGraph.uiPreferences
+            CustomColorScheme(
+                seed = Color(uiPreferences.colorTheme().get()),
+                style = uiPreferences.customThemeStyle().get(),
+            )
+        }
+        // KMK <--
+        else -> {
+            colorSchemes.getOrDefault(appTheme, TachiyomiColorScheme)
+        }
+    }
+    return colorScheme.getColorScheme(
+        isDark = isDark,
+        isAmoled = isAmoled,
+        overrideDarkSurfaceContainers = appTheme != AppTheme.MONET,
+    )
+}
+
+private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
+    AppTheme.DEFAULT to TachiyomiColorScheme,
+    AppTheme.CATPPUCCIN to CatppuccinColorScheme,
+    AppTheme.GREEN_APPLE to GreenAppleColorScheme,
+    AppTheme.LAVENDER to LavenderColorScheme,
+    AppTheme.MIDNIGHT_DUSK to MidnightDuskColorScheme,
+    AppTheme.MONOCHROME to MonochromeColorScheme,
+    AppTheme.NORD to NordColorScheme,
+    AppTheme.STRAWBERRY_DAIQUIRI to StrawberryColorScheme,
+    AppTheme.TAKO to TakoColorScheme,
+    AppTheme.TEALTURQUOISE to TealTurqoiseColorScheme,
+    AppTheme.TIDAL_WAVE to TidalWaveColorScheme,
+    AppTheme.YINYANG to YinYangColorScheme,
+    AppTheme.YOTSUBA to YotsubaColorScheme,
+    AppTheme.CLOUDFLARE to CloudflareColorScheme,
+    AppTheme.COTTONCANDY to CottoncandyColorScheme,
+    AppTheme.DOOM to DoomColorScheme,
+    AppTheme.MATRIX to MatrixColorScheme,
+    AppTheme.MOCHA to MochaColorScheme,
+    AppTheme.SAPPHIRE to SapphireColorScheme,
+)

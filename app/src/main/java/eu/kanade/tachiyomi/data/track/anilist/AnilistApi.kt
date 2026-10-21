@@ -1,0 +1,616 @@
+package eu.kanade.tachiyomi.data.track.anilist
+
+import android.net.Uri
+import androidx.core.net.toUri
+import eu.kanade.tachiyomi.data.database.models.Track
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALAddMangaResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALCurrentUserResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALError
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALIdSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaMetadata
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaRelations
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListMangaQueryResult
+import eu.kanade.tachiyomi.data.track.model.TrackMangaMetadata
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.network.POST
+import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.network.interceptor.rateLimit
+import eu.kanade.tachiyomi.network.jsonMime
+import eu.kanade.tachiyomi.network.parseAs
+import eu.kanade.tachiyomi.util.lang.htmlDecode
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
+import mihon.app.di.globalAppGraph
+import okhttp3.Call
+import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import tachiyomi.core.common.util.lang.withIOContext
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import kotlin.time.Duration.Companion.minutes
+import tachiyomi.domain.track.model.Track as DomainTrack
+
+class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
+
+    private val json: Json by lazy { globalAppGraph.json }
+
+    private val authClient = client.newBuilder()
+        .addInterceptor(interceptor)
+        .rateLimit(permits = 25, period = 1.minutes)
+        .build()
+
+    // KMK -->
+    private suspend fun Call.awaitALSuccess(): Response {
+        val callStack = Exception().stackTrace.run { copyOfRange(1, size) }
+        val response = try {
+            await()
+        } catch (e: java.io.IOException) {
+            e.stackTrace = callStack
+            throw e
+        }
+        try {
+            response.parseALError()
+        } catch (e: Exception) {
+            response.close()
+            e.stackTrace = callStack
+            throw e
+        }
+        if (!response.isSuccessful) {
+            val code = response.code
+            response.close()
+            throw eu.kanade.tachiyomi.network.HttpException(code).apply { stackTrace = callStack }
+        }
+        return response
+    }
+
+    private fun Response.parseALError() {
+        val bodyString = try {
+            peekBody(1024 * 1024).string()
+        } catch (_: Exception) {
+            return
+        }
+        val errorObj = try {
+            json.decodeFromString<ALError>(bodyString)
+        } catch (_: Exception) {
+            null
+        }
+
+        errorObj?.errors?.firstOrNull()?.let {
+            val msg = it.message
+            if (msg.contains("Invalid token") || it.status == 401) {
+                throw Exception("AniList token expired, please login again")
+            }
+            throw Exception(msg)
+        }
+    }
+    // KMK <--
+
+    suspend fun addLibManga(track: Track): Track {
+        return withIOContext {
+            val query = $$"""
+            |mutation AddManga($mangaId: Int, $progress: Int, $status: MediaListStatus, $private: Boolean) {
+                |SaveMediaListEntry (mediaId: $mangaId, progress: $progress, status: $status, private: $private) {
+                |   id
+                |   status
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("mangaId", track.remote_id)
+                    put("progress", track.last_chapter_read.toInt())
+                    put("status", track.toApiStatus())
+                    put("private", track.private)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    // KMK -->
+                    .awaitALSuccess()
+                    // KMK <--
+                    .parseAs<ALAddMangaResult>()
+                    .let {
+                        track.library_id = it.data.entry.id
+                        track
+                    }
+            }
+        }
+    }
+
+    suspend fun updateLibManga(track: Track): Track {
+        return withIOContext {
+            val query = $$"""
+            |mutation UpdateManga(
+                |$listId: Int, $progress: Int, $status: MediaListStatus, $private: Boolean,
+                |$score: Int, $startedAt: FuzzyDateInput, $completedAt: FuzzyDateInput,
+                |$repeat: Int
+            |) {
+                |SaveMediaListEntry(
+                    |id: $listId, progress: $progress, status: $status, private: $private,
+                    |scoreRaw: $score, startedAt: $startedAt, completedAt: $completedAt,
+                    |repeat: $repeat
+                |) {
+                    |id
+                    |status
+                    |progress
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("listId", track.library_id)
+                    put("progress", track.last_chapter_read.toInt())
+                    put("status", track.toApiStatus())
+                    put("score", track.score.toInt())
+                    put("startedAt", createDate(track.started_reading_date))
+                    put("completedAt", createDate(track.finished_reading_date))
+                    put("private", track.private)
+                    // KMK -->
+                    put("repeat", track.reread_count)
+                    // KMK <--
+                }
+            }
+            authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                // KMK -->
+                .awaitALSuccess()
+                .close()
+            // KMK <--
+            track
+        }
+    }
+
+    suspend fun deleteLibManga(track: DomainTrack) {
+        withIOContext {
+            val query = $$"""
+            |mutation DeleteManga($listId: Int) {
+                |DeleteMediaListEntry(id: $listId) {
+                    |deleted
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("listId", track.libraryId)
+                }
+            }
+            authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                // KMK -->
+                .awaitALSuccess()
+                .close()
+            // KMK <--
+        }
+    }
+
+    suspend fun search(search: String): List<TrackSearch> {
+        return withIOContext {
+            val query = $$"""
+            |query Search($query: String) {
+                |Page (perPage: 50) {
+                    |media(search: $query, type: MANGA, format_not_in: [NOVEL]) {
+                        |id
+                        |staff {
+                            |edges {
+                                |role
+                                |id
+                                |node {
+                                    |name {
+                                        |full
+                                        |userPreferred
+                                        |native
+                                    |}
+                                |}
+                            |}
+                        |}
+                        |title {
+                            |userPreferred
+                        |}
+                        |coverImage {
+                            |large
+                        |}
+                        |format
+                        |status
+                        |chapters
+                        |description
+                        |startDate {
+                            |year
+                            |month
+                            |day
+                        |}
+                        |averageScore
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("query", search)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    // KMK -->
+                    .awaitALSuccess()
+                    // KMK <--
+                    .parseAs<ALSearchResult>()
+                    .data.page.media
+                    .map { it.toALManga().toTrack() }
+            }
+        }
+    }
+
+    suspend fun findLibManga(track: Track, userid: Int): Track? {
+        return withIOContext {
+            val query = $$"""
+            |query ($id: Int!, $manga_id: Int!) {
+                |Page {
+                    |mediaList(userId: $id, type: MANGA, mediaId: $manga_id) {
+                        |id
+                        |status
+                        |scoreRaw: score(format: POINT_100)
+                        |progress
+                        |private
+                        |startedAt {
+                            |year
+                            |month
+                            |day
+                        |}
+                        |completedAt {
+                            |year
+                            |month
+                            |day
+                        |}
+                        |media {
+                            |id
+                            |title {
+                                |userPreferred
+                            |}
+                            |coverImage {
+                                |large
+                            |}
+                            |format
+                            |status
+                            |chapters
+                            |description
+                            |startDate {
+                                |year
+                                |month
+                                |day
+                            |}
+                            |staff {
+                                |edges {
+                                    |role
+                                    |id
+                                    |node {
+                                        |name {
+                                            |full
+                                            |userPreferred
+                                            |native
+                                        |}
+                                    |}
+                                |}
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("id", userid)
+                    put("manga_id", track.remote_id)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    // KMK -->
+                    .awaitALSuccess()
+                    // KMK <--
+                    .parseAs<ALUserListMangaQueryResult>()
+                    .data.page.mediaList
+                    .map { it.toALUserManga() }
+                    .firstOrNull()
+                    ?.toTrack()
+            }
+        }
+    }
+
+    suspend fun getLibManga(track: Track, userId: Int): Track {
+        return findLibManga(track, userId) ?: throw Exception("Could not find manga")
+    }
+
+    fun createOAuth(token: String): ALOAuth {
+        return ALOAuth(token, "Bearer", System.currentTimeMillis() + 31536000000, 31536000000)
+    }
+
+    suspend fun getCurrentUser(): Pair<Int, String> {
+        return withIOContext {
+            val query = """
+            |query User {
+                |Viewer {
+                    |id
+                    |mediaListOptions {
+                        |scoreFormat
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    // KMK -->
+                    .awaitALSuccess()
+                    // KMK <--
+                    .parseAs<ALCurrentUserResult>()
+                    .let {
+                        val viewer = it.data.viewer
+                        Pair(viewer.id, viewer.mediaListOptions.scoreFormat)
+                    }
+            }
+        }
+    }
+
+    suspend fun getMangaMetadata(track: DomainTrack): TrackMangaMetadata {
+        return withIOContext {
+            val query = $$"""
+            |query ($mangaId: Int!) {
+                |Media (id: $mangaId) {
+                    |id
+                    |title {
+                        |userPreferred
+                    |}
+                    |coverImage {
+                        |large
+                    |}
+                    |description
+                    |status
+                    |genres
+                    |tags { name }
+                    |staff {
+                        |edges {
+                            |role
+                            |id
+                            |node {
+                                |name {
+                                    |full
+                                    |userPreferred
+                                    |native
+                                |}
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("mangaId", track.remoteId)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    // KMK -->
+                    .awaitALSuccess()
+                    // KMK <--
+                    .parseAs<ALMangaMetadata>()
+                    .let { metadata ->
+                        val media = metadata.data.media
+                        TrackMangaMetadata(
+                            remoteId = media.id,
+                            title = media.title.userPreferred,
+                            thumbnailUrl = media.coverImage.large,
+                            description = media.description?.htmlDecode()?.ifEmpty { null },
+                            authors = media.staff.edges
+                                .filter { "Story" in it.role }
+                                .mapNotNull { it.node.name() }
+                                .joinToString(", ")
+                                .ifEmpty { null },
+                            artists = media.staff.edges
+                                .filter { "Art" in it.role }
+                                .mapNotNull { it.node.name() }
+                                .joinToString(", ")
+                                .ifEmpty { null },
+                            // KMK -->
+                            tags = (media.genres.orEmpty() + media.tags.orEmpty().map { it.name }).distinct().ifEmpty { null },
+                            status = when (media.status) {
+                                "FINISHED" -> eu.kanade.tachiyomi.source.model.SManga.COMPLETED.toLong()
+                                "RELEASING" -> eu.kanade.tachiyomi.source.model.SManga.ONGOING.toLong()
+                                "NOT_YET_RELEASED" -> eu.kanade.tachiyomi.source.model.SManga.PUBLISHING_FINISHED.toLong()
+                                "CANCELLED" -> eu.kanade.tachiyomi.source.model.SManga.CANCELLED.toLong()
+                                "HIATUS" -> eu.kanade.tachiyomi.source.model.SManga.ON_HIATUS.toLong()
+                                else -> null
+                            },
+                            // KMK <--
+                        )
+                    }
+            }
+        }
+    }
+
+    // SY -->
+    suspend fun searchById(id: String): TrackSearch {
+        return withIOContext {
+            val query = $$"""
+            |query ($mangaId: Int!) {
+                |Media (id: $mangaId) {
+                    |id
+                    |title {
+                        |userPreferred
+                    |}
+                    |coverImage {
+                        |large
+                    |}
+                    |format
+                    |status
+                    |chapters
+                    |description
+                    |startDate {
+                        |year
+                        |month
+                        |day
+                    |}
+                    |averageScore
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("mangaId", id)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    // KMK -->
+                    .awaitALSuccess()
+                    // KMK <--
+                    .parseAs<ALIdSearchResult>()
+                    .data.media
+                    .toALManga()
+                    .toTrack()
+            }
+        }
+    }
+    // SY <--
+
+    // KMK -->
+    /**
+     * Public prequel/sequel relations for a media id. Uses the unauthenticated
+     * client: relations are public data, and requiring login would lock out
+     * readers who only bound AniList for metadata. Abuse is capped upstream by
+     * [tachiyomi.domain.manga.interactor.RelatedMangaCache] (24h TTL).
+     */
+    suspend fun getMangaRelations(mediaId: Long): ALMangaRelations {
+        return withIOContext {
+            val query = $$"""
+            |query ($mangaId: Int!) {
+                |Media (id: $mangaId) {
+                    |relations {
+                        |edges {
+                            |relationType(version: 2)
+                            |node {
+                                |id
+                                |title {
+                                    |romaji
+                                    |english
+                                    |userPreferred
+                                |}
+                                |siteUrl
+                                # KMK --> cover for the sequel/prequel card
+                                |coverImage {
+                                    |large
+                                |}
+                                # KMK <--
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("mangaId", mediaId)
+                }
+            }
+            with(json) {
+                client.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    .await()
+                    .parseAs<ALMangaRelations>()
+            }
+        }
+    }
+    // KMK <--
+
+    private fun createDate(dateValue: Long): JsonObject {
+        if (dateValue == 0L) {
+            return buildJsonObject {
+                put("year", JsonNull)
+                put("month", JsonNull)
+                put("day", JsonNull)
+            }
+        }
+
+        val dateTime = ZonedDateTime.ofInstant(Instant.ofEpochMilli(dateValue), ZoneId.systemDefault())
+        return buildJsonObject {
+            put("year", dateTime.year)
+            put("month", dateTime.monthValue)
+            put("day", dateTime.dayOfMonth)
+        }
+    }
+
+    companion object {
+        private const val CLIENT_ID = "52212"
+        private const val API_URL = "https://graphql.anilist.co/"
+        private const val BASE_URL = "https://anilist.co/api/v2/"
+        private const val BASE_MANGA_URL = "https://anilist.co/manga/"
+
+        fun mangaUrl(mediaId: Long): String {
+            return BASE_MANGA_URL + mediaId
+        }
+
+        fun authUrl(): Uri = "${BASE_URL}oauth/authorize".toUri().buildUpon()
+            .appendQueryParameter("client_id", CLIENT_ID)
+            .appendQueryParameter("response_type", "token")
+            .build()
+    }
+}

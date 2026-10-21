@@ -1,0 +1,1079 @@
+package eu.kanade.presentation.more.settings.screen
+
+import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.provider.Settings
+import android.webkit.WebStorage
+import android.webkit.WebView
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.core.text.HtmlCompat
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.extension.interactor.TrustExtension
+import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.domain.source.service.SourcePreferences.DataSaver
+import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.RemovedCoverRetention
+import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.more.settings.PreferenceDependency
+import eu.kanade.presentation.more.settings.screen.advanced.ClearDatabaseScreen
+import eu.kanade.presentation.more.settings.screen.debug.DebugInfoScreen
+import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.core.security.SecurityPreferences
+import eu.kanade.tachiyomi.data.download.DownloadCache
+import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.data.library.MetadataUpdateJob
+import eu.kanade.tachiyomi.extension.ExtensionAutoUpdateWorker
+import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.NetworkPreferences
+import eu.kanade.tachiyomi.network.PREF_DOH_360
+import eu.kanade.tachiyomi.network.PREF_DOH_ADGUARD
+import eu.kanade.tachiyomi.network.PREF_DOH_ALIDNS
+import eu.kanade.tachiyomi.network.PREF_DOH_CLOUDFLARE
+import eu.kanade.tachiyomi.network.PREF_DOH_CONTROLD
+import eu.kanade.tachiyomi.network.PREF_DOH_DNSPOD
+import eu.kanade.tachiyomi.network.PREF_DOH_GOOGLE
+import eu.kanade.tachiyomi.network.PREF_DOH_MULLVAD
+import eu.kanade.tachiyomi.network.PREF_DOH_NJALLA
+import eu.kanade.tachiyomi.network.PREF_DOH_QUAD101
+import eu.kanade.tachiyomi.network.PREF_DOH_QUAD9
+import eu.kanade.tachiyomi.network.PREF_DOH_SHECAN
+import eu.kanade.tachiyomi.network.interceptor.FlareSolverr
+import eu.kanade.tachiyomi.source.AndroidSourceManager
+import eu.kanade.tachiyomi.ui.more.OnboardingScreen
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.util.CrashLogUtil
+import eu.kanade.tachiyomi.util.storage.DiskUtil
+import eu.kanade.tachiyomi.util.system.GLUtil
+import eu.kanade.tachiyomi.util.system.isDebugBuildType
+import eu.kanade.tachiyomi.util.system.isShizukuInstalled
+import eu.kanade.tachiyomi.util.system.powerManager
+import eu.kanade.tachiyomi.util.system.setDefaultSettings
+import eu.kanade.tachiyomi.util.system.toast
+import exh.debug.SettingsDebugScreen
+import exh.log.EHLogLevel
+import exh.pref.DelegateSourcePreferences
+import exh.source.ExhPreferences
+import exh.util.toAnnotatedString
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import logcat.LogPriority
+import mihon.app.di.globalAppGraph
+import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import tachiyomi.core.common.i18n.pluralStringResource
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.core.common.util.system.ImageUtil
+import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
+import tachiyomi.domain.download.service.DownloadPreferences
+import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.manga.interactor.GetAllManga
+import tachiyomi.domain.manga.interactor.ResetViewerFlags
+import tachiyomi.domain.release.service.AppUpdatePolicy
+import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.i18n.sy.SYMR
+import tachiyomi.presentation.core.components.LabeledCheckbox
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
+import java.io.File
+import tachiyomi.core.common.preference.Preference as BasePreference
+
+object SettingsAdvancedScreen : SearchableSettings {
+    @Suppress("unused")
+    private fun readResolve(): Any = SettingsAdvancedScreen
+
+    @ReadOnlyComposable
+    @Composable
+    override fun getTitleRes() = MR.strings.pref_category_advanced
+
+    @Composable
+    override fun getPreferences(): List<Preference> {
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+
+        val basePreferences = remember { globalAppGraph.basePreferences }
+        val networkPreferences = remember { globalAppGraph.networkPreferences }
+        val libraryPreferences = remember { globalAppGraph.libraryPreferences }
+        // SY -->
+        val downloadPreferences = remember { globalAppGraph.downloadPreferences }
+        val exhPreferences = remember { globalAppGraph.exhPreferences }
+        // SY <--
+
+        return listOf(
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_dump_crash_logs),
+                subtitle = stringResource(MR.strings.pref_dump_crash_logs_summary),
+                onClick = {
+                    scope.launch {
+                        CrashLogUtil(context).dumpLogs()
+                    }
+                },
+            ),
+            /* SY --> Preference.PreferenceItem.SwitchPreference(
+                preference = networkPreferences.verboseLogging(),
+                title = stringResource(MR.strings.pref_verbose_logging),
+                subtitle = stringResource(MR.strings.pref_verbose_logging_summary),
+                onValueChanged = {
+                    context.toast(MR.strings.requires_app_restart)
+                    true
+                },
+            ), SY <-- */
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_debug_info),
+                onClick = { navigator.push(DebugInfoScreen()) },
+            ),
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_onboarding_guide),
+                onClick = { navigator.push(OnboardingScreen()) },
+            ),
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_manage_notifications),
+                onClick = {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    }
+                    context.startActivity(intent)
+                },
+            ),
+            // KMK -->
+            Preference.PreferenceItem.MultiSelectListPreference(
+                preference = exhPreferences.appShouldAutoUpdate(),
+                entries = persistentMapOf(
+                    AppUpdatePolicy.DEVICE_ONLY_ON_WIFI to stringResource(MR.strings.connected_to_wifi),
+                    AppUpdatePolicy.DEVICE_NETWORK_NOT_METERED to stringResource(MR.strings.network_not_metered),
+                    AppUpdatePolicy.DEVICE_CHARGING to stringResource(MR.strings.charging),
+                    AppUpdatePolicy.DISABLE_AUTO_DOWNLOAD to stringResource(KMR.strings.auto_update_app_disable_auto_download),
+                ),
+                title = stringResource(KMR.strings.auto_update_app),
+                subtitle = stringResource(MR.strings.restrictions),
+                onValueChanged = {
+                    true
+                },
+            ),
+            // KMK <--
+            getBackgroundActivityGroup(),
+            getDataGroup(),
+            getNetworkGroup(networkPreferences = networkPreferences),
+            getLibraryGroup(libraryPreferences = libraryPreferences),
+            // SY -->
+            getDownloadsGroup(downloadPreferences = downloadPreferences),
+            // SY <--
+            getReaderGroup(
+                basePreferences = basePreferences,
+                // KMK -->
+                readerPreferences = globalAppGraph.readerPreferences,
+                // KMK <--
+            ),
+            getExtensionsGroup(basePreferences = basePreferences),
+            // SY -->
+            // getDownloaderGroup(),
+            getDataSaverGroup(),
+            getDeveloperToolsGroup(),
+            // SY <--
+        )
+    }
+
+    @Composable
+    private fun getBackgroundActivityGroup(): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val uriHandler = LocalUriHandler.current
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.label_background_activity),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_disable_battery_optimization),
+                    subtitle = stringResource(MR.strings.pref_disable_battery_optimization_summary),
+                    onClick = {
+                        val packageName: String = context.packageName
+                        if (!context.powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                            try {
+                                @SuppressLint("BatteryLife")
+                                val intent = Intent().apply {
+                                    action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                                    data = "package:$packageName".toUri()
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            } catch (_: ActivityNotFoundException) {
+                                context.toast(MR.strings.battery_optimization_setting_activity_not_found)
+                            }
+                        } else {
+                            context.toast(MR.strings.battery_optimization_disabled)
+                        }
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = "Don't kill my app!",
+                    subtitle = stringResource(MR.strings.about_dont_kill_my_app),
+                    onClick = { uriHandler.openUri("https://dontkillmyapp.com/") },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getDataGroup(): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+        // KMK -->
+        val uiPreferences = globalAppGraph.uiPreferences
+        // KMK <--
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.label_data),
+            preferenceItems = persistentListOf(
+                // KMK --> Retention is a window, not a size, so it reads better as a list of periods
+                // than as a raw day count the user has to interpret.
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.removedCoverRetention(),
+                    title = stringResource(KMR.strings.pref_removed_cover_retention),
+                    subtitle = stringResource(KMR.strings.pref_removed_cover_retention_summary),
+                    entries = RemovedCoverRetention.entries.associateWith { retention ->
+                        stringResource(
+                            when (retention) {
+                                RemovedCoverRetention.IMMEDIATE -> KMR.strings.pref_removed_cover_retention_immediate
+                                RemovedCoverRetention.ONE_DAY -> KMR.strings.pref_removed_cover_retention_1_day
+                                RemovedCoverRetention.THREE_DAYS -> KMR.strings.pref_removed_cover_retention_3_days
+                                RemovedCoverRetention.SEVEN_DAYS -> KMR.strings.pref_removed_cover_retention_7_days
+                                RemovedCoverRetention.THIRTY_DAYS -> KMR.strings.pref_removed_cover_retention_30_days
+                            },
+                        )
+                    }
+                        .toImmutableMap(),
+                ),
+                // KMK <-->
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_invalidate_download_cache),
+                    subtitle = stringResource(MR.strings.pref_invalidate_download_cache_summary),
+                    onClick = {
+                        globalAppGraph.downloadCache.invalidateCache()
+                        context.toast(MR.strings.download_cache_invalidated)
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_clear_database),
+                    subtitle = stringResource(MR.strings.pref_clear_database_summary),
+                    onClick = { navigator.push(ClearDatabaseScreen()) },
+                ),
+            ),
+        )
+    }
+
+    // KMK --> FlareSolverr, ported from jobobby04/TachiyomiSY#1124.
+    private suspend fun testFlareSolverrAndUpdateUserAgent(
+        userAgentPref: BasePreference<String>,
+        context: android.content.Context,
+    ) {
+        try {
+            val response = withContext(Dispatchers.IO) {
+                globalAppGraph.flareSolverr.request(url = "https://www.google.com/")
+            }
+            val solution = response.solution
+            if (response.status == "ok" && solution != null) {
+                userAgentPref.set(solution.userAgent)
+                context.toast(KMR.strings.flare_solver_user_agent_update_success)
+            } else {
+                logcat(LogPriority.ERROR, tag = "FlareSolverr") { "FlareSolverr test failed: ${response.message}" }
+                context.toast(KMR.strings.flare_solver_update_user_agent_failed)
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e, tag = "FlareSolverr") { "Failed to contact FlareSolverr" }
+            context.toast(KMR.strings.flare_solver_error)
+        }
+    }
+    // KMK <--
+
+    @Composable
+    private fun getNetworkGroup(
+        networkPreferences: NetworkPreferences,
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val networkHelper = remember { globalAppGraph.networkHelper }
+
+        val userAgentPref = networkPreferences.defaultUserAgent()
+        val userAgent by userAgentPref.collectAsState()
+
+        // KMK --> FlareSolverr, ported from jobobby04/TachiyomiSY#1124.
+        val scope = rememberCoroutineScope()
+        val flareSolverrUrlPref = networkPreferences.flareSolverrUrl
+        val enableFlareSolverrPref = networkPreferences.enableFlareSolverr
+        val enableFlareSolverr by enableFlareSolverrPref.collectAsState()
+        // KMK <--
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.label_network),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_clear_cookies),
+                    onClick = {
+                        networkHelper.cookieJar.removeAll()
+                        context.toast(MR.strings.cookies_cleared)
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_clear_webview_data),
+                    onClick = {
+                        try {
+                            WebView(context).run {
+                                setDefaultSettings()
+                                clearCache(true)
+                                clearFormData()
+                                clearHistory()
+                                clearSslPreferences()
+                            }
+                            WebStorage.getInstance().deleteAllData()
+                            context.applicationInfo?.dataDir?.let {
+                                File("$it/app_webview/").deleteRecursively()
+                            }
+                            context.toast(MR.strings.webview_data_deleted)
+                        } catch (e: Throwable) {
+                            logcat(LogPriority.ERROR, e)
+                            context.toast(MR.strings.cache_delete_error)
+                        }
+                    },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = networkPreferences.dohProvider(),
+                    entries = persistentMapOf(
+                        -1 to stringResource(MR.strings.disabled),
+                        PREF_DOH_CLOUDFLARE to "Cloudflare",
+                        PREF_DOH_GOOGLE to "Google",
+                        PREF_DOH_ADGUARD to "AdGuard",
+                        PREF_DOH_QUAD9 to "Quad9",
+                        PREF_DOH_ALIDNS to "AliDNS",
+                        PREF_DOH_DNSPOD to "DNSPod",
+                        PREF_DOH_360 to "360",
+                        PREF_DOH_QUAD101 to "Quad 101",
+                        PREF_DOH_MULLVAD to "Mullvad",
+                        PREF_DOH_CONTROLD to "Control D",
+                        PREF_DOH_NJALLA to "Njalla",
+                        PREF_DOH_SHECAN to "Shecan",
+                    ),
+                    title = stringResource(MR.strings.pref_dns_over_https),
+                    onValueChanged = {
+                        context.toast(MR.strings.requires_app_restart)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = userAgentPref,
+                    title = stringResource(MR.strings.pref_user_agent_string),
+                    onValueChanged = {
+                        try {
+                            // OkHttp checks for valid values internally
+                            Headers.Builder().add("User-Agent", it)
+                            context.toast(MR.strings.requires_app_restart)
+                        } catch (_: IllegalArgumentException) {
+                            context.toast(MR.strings.error_user_agent_string_invalid)
+                            return@EditTextPreference false
+                        }
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_reset_user_agent_string),
+                    enabled = remember(userAgent) { userAgent != userAgentPref.defaultValue() },
+                    onClick = {
+                        userAgentPref.delete()
+                        context.toast(MR.strings.requires_app_restart)
+                    },
+                ),
+                // KMK -->
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = enableFlareSolverrPref,
+                    title = stringResource(KMR.strings.pref_enable_flare_solverr),
+                    subtitle = stringResource(KMR.strings.pref_enable_flare_solverr_summary),
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = flareSolverrUrlPref,
+                    title = stringResource(KMR.strings.pref_flare_solverr_url),
+                    enabled = enableFlareSolverr,
+                    subtitle = stringResource(KMR.strings.pref_flare_solverr_url_summary),
+                    onValueChanged = { it.trim().toHttpUrlOrNull() != null },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_test_flare_solverr_and_update_user_agent),
+                    enabled = enableFlareSolverr,
+                    subtitle = stringResource(KMR.strings.pref_test_flare_solverr_and_update_user_agent_summary),
+                    onClick = {
+                        scope.launch {
+                            testFlareSolverrAndUpdateUserAgent(userAgentPref, context)
+                        }
+                    },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = networkPreferences.showCloudflareBypassBanner,
+                    title = stringResource(KMR.strings.pref_cloudflare_bypass_banner),
+                    subtitle = stringResource(KMR.strings.pref_cloudflare_bypass_banner_summary),
+                ),
+                // KMK <--
+            ),
+        )
+    }
+
+    @Composable
+    private fun getLibraryGroup(
+        libraryPreferences: LibraryPreferences,
+    ): Preference.PreferenceGroup {
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        // KMK -->
+        val uiPreferences = remember { globalAppGraph.uiPreferences }
+        // KMK <--
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.label_library),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_refresh_library_covers),
+                    onClick = { MetadataUpdateJob.startNow(context) },
+                ),
+                // KMK -->
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.preloadLibraryColor(),
+                    title = stringResource(KMR.strings.preload_library_cover_color),
+                ),
+                // KMK <--
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_reset_viewer_flags),
+                    subtitle = stringResource(MR.strings.pref_reset_viewer_flags_summary),
+                    onClick = {
+                        scope.launchNonCancellable {
+                            val success = globalAppGraph.resetViewerFlags.await()
+                            withUIContext {
+                                val message = if (success) {
+                                    MR.strings.pref_reset_viewer_flags_success
+                                } else {
+                                    MR.strings.pref_reset_viewer_flags_error
+                                }
+                                context.toast(message)
+                            }
+                        }
+                    },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.updateMangaTitles(),
+                    title = stringResource(MR.strings.pref_update_library_manga_titles),
+                    subtitle = stringResource(MR.strings.pref_update_library_manga_titles_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.disallowNonAsciiFilenames(),
+                    title = stringResource(MR.strings.pref_disallow_non_ascii_filenames),
+                    subtitle = stringResource(MR.strings.pref_disallow_non_ascii_filenames_details),
+                ),
+                // KMK -->
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.smartScanlatorMerge(),
+                    title = stringResource(KMR.strings.pref_smart_scanlator_merge),
+                    subtitle = stringResource(KMR.strings.pref_smart_scanlator_merge_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.showSmartScanlatorInDetails(),
+                    title = stringResource(KMR.strings.pref_show_smart_scanlator_details),
+                    subtitle = stringResource(KMR.strings.pref_show_smart_scanlator_details_summary),
+                    dependsOn = PreferenceDependency(libraryPreferences.smartScanlatorMerge()),
+                ),
+                // KMK <--
+            ),
+        )
+    }
+
+    // SY ->
+    @Composable
+    private fun getDownloadsGroup(
+        downloadPreferences: DownloadPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_category_downloads),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = downloadPreferences.includeChapterUrlHash(),
+                    title = stringResource(SYMR.strings.pref_include_chapter_url_hash),
+                    subtitle = stringResource(SYMR.strings.pref_include_chapter_url_hash_desc),
+                ),
+            ),
+        )
+    }
+    // <- SY
+
+    @Composable
+    private fun getReaderGroup(
+        basePreferences: BasePreferences,
+        // KMK -->
+        readerPreferences: ReaderPreferences,
+        // KMK <--
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val chooseColorProfile = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            uri?.let {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+                basePreferences.displayProfile().set(uri.toString())
+            }
+        }
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_category_reader),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = basePreferences.hardwareBitmapThreshold(),
+                    entries = GLUtil.CUSTOM_TEXTURE_LIMIT_OPTIONS
+                        .mapIndexed { index, option ->
+                            val display = if (index == 0) {
+                                stringResource(MR.strings.pref_hardware_bitmap_threshold_default, option)
+                            } else {
+                                option.toString()
+                            }
+                            option to display
+                        }
+                        .toMap()
+                        .toImmutableMap(),
+                    title = stringResource(MR.strings.pref_hardware_bitmap_threshold),
+                    subtitleProvider = { value, options ->
+                        stringResource(MR.strings.pref_hardware_bitmap_threshold_summary, options[value].orEmpty())
+                    },
+                    enabled = !ImageUtil.HARDWARE_BITMAP_UNSUPPORTED &&
+                        GLUtil.DEVICE_TEXTURE_LIMIT > GLUtil.SAFE_TEXTURE_LIMIT,
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = basePreferences.alwaysDecodeLongStripWithSSIV(),
+                    title = stringResource(MR.strings.pref_always_decode_long_strip_with_ssiv_2),
+                    subtitle = stringResource(MR.strings.pref_always_decode_long_strip_with_ssiv_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = basePreferences.highQualityRenderer(),
+                    title = stringResource(MR.strings.pref_high_quality_renderer),
+                    subtitle = stringResource(MR.strings.pref_high_quality_renderer_summary),
+                ),
+                // KMK -->
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.dualPageMatchHeights(),
+                    title = stringResource(KMR.strings.pref_dual_page_match_heights),
+                    subtitle = stringResource(KMR.strings.pref_dual_page_match_heights_summary),
+                ),
+                // KMK <--
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_display_profile),
+                    subtitle = basePreferences.displayProfile().get(),
+                    onClick = {
+                        chooseColorProfile.launch(arrayOf("*/*"))
+                    },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getExtensionsGroup(
+        basePreferences: BasePreferences,
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val uriHandler = LocalUriHandler.current
+        val extensionInstallerPref = basePreferences.extensionInstaller()
+        var shizukuMissing by rememberSaveable { mutableStateOf(false) }
+        val trustExtension = remember { globalAppGraph.trustExtension }
+        // KMK --> Auto extension updates. Resolved per composition rather than cached, because
+        // both the toggle and the interval are also written from the extensions page, and the
+        // schedule has to be reconciled whenever either changes.
+        val sourcePreferences = globalAppGraph.sourcePreferences
+        val autoUpdatePref = sourcePreferences.extensionAutoUpdate()
+        val autoUpdateIntervalPref = sourcePreferences.extensionAutoUpdateInterval()
+        val autoUpdateSupported = sourcePreferences.extensionAutoUpdateSupported()
+
+        if (shizukuMissing) {
+            val dismiss = { shizukuMissing = false }
+            AlertDialog(
+                onDismissRequest = dismiss,
+                title = { Text(text = stringResource(MR.strings.ext_installer_shizuku)) },
+                text = { Text(text = stringResource(MR.strings.ext_installer_shizuku_unavailable_dialog)) },
+                dismissButton = {
+                    TextButton(onClick = dismiss) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            dismiss()
+                            uriHandler.openUri("https://shizuku.rikka.app/download")
+                        },
+                    ) {
+                        Text(text = stringResource(MR.strings.action_ok))
+                    }
+                },
+            )
+        }
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.label_extensions),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = extensionInstallerPref,
+                    entries = extensionInstallerPref.entries
+                        // KMK --> PRIVATE is offered on release builds too. It was hidden while it
+                        // made cold start and resume crawl on a large collection; ExtensionLoader now
+                        // reads each private archive once instead of once per installed extension
+                        // and does it on the extensions pool, so that cost is gone. It is also the
+                        // only installer that needs no install permission, which matters while
+                        // Google gates "install from unverified developers" behind a 24 hour wait
+                        // that can lapse - see pref_private_installer_warning.
+                        // KMK <--
+                        .associateWith { stringResource(it.titleRes) }
+                        .toImmutableMap(),
+                    title = stringResource(MR.strings.ext_installer_pref),
+                    onValueChanged = {
+                        if (it == BasePreferences.ExtensionInstaller.SHIZUKU &&
+                            !context.isShizukuInstalled
+                        ) {
+                            shizukuMissing = true
+                            false
+                        } else {
+                            true
+                        }
+                    },
+                ),
+                // KMK -->
+                Preference.PreferenceItem.InfoPreference(stringResource(KMR.strings.pref_private_installer_warning)),
+                // KMK <--
+                // KMK --> Automatic extension updates. The interval row is kept enabled when the
+                // toggle is off on purpose: turning auto-update off and back on should restore the
+                // interval the user picked, not reset it. Grayed when the selected installer
+                // cannot finish an install in the background, with the reason stated, instead of
+                // silently doing nothing.
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = autoUpdatePref,
+                    title = stringResource(KMR.strings.pref_auto_update_extensions),
+                    subtitle = stringResource(
+                        if (autoUpdateSupported) {
+                            KMR.strings.pref_auto_update_extensions_summary
+                        } else {
+                            KMR.strings.pref_auto_update_extensions_unsupported
+                        },
+                    ),
+                    enabled = autoUpdateSupported,
+                    onValueChanged = {
+                        ExtensionAutoUpdateWorker.schedule(context)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = autoUpdateIntervalPref,
+                    entries = persistentMapOf(
+                        6 to stringResource(KMR.strings.update_6hour),
+                        12 to stringResource(MR.strings.update_12hour),
+                        24 to stringResource(MR.strings.update_24hour),
+                        168 to stringResource(MR.strings.update_weekly),
+                    ),
+                    title = stringResource(MR.strings.pref_library_update_interval),
+                    enabled = autoUpdateSupported,
+                    onValueChanged = {
+                        ExtensionAutoUpdateWorker.schedule(context)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.ext_revoke_trust),
+                    onClick = {
+                        trustExtension.revokeAll()
+                        context.toast(MR.strings.requires_app_restart)
+                    },
+                ),
+            ),
+        )
+    }
+
+    // SY -->
+    @Composable
+    fun CleanupDownloadsDialog(
+        onDismissRequest: () -> Unit,
+        onCleanupDownloads: (removeRead: Boolean, removeNonFavorite: Boolean) -> Unit,
+    ) {
+        val resources = LocalResources.current
+        val options = remember(resources) { resources.getStringArray(R.array.clean_up_downloads).toList() }
+        val selection = remember {
+            options.toMutableStateList()
+        }
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            title = { Text(text = stringResource(SYMR.strings.clean_up_downloaded_chapters)) },
+            text = {
+                LazyColumn {
+                    options.forEachIndexed { index, option ->
+                        item {
+                            LabeledCheckbox(
+                                label = option,
+                                checked = index == 0 || selection.contains(option),
+                                onCheckedChange = {
+                                    when (it) {
+                                        true -> selection.add(option)
+                                        false -> selection.remove(option)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = true,
+            ),
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val removeRead = options[1] in selection
+                        val removeNonFavorite = options[2] in selection
+                        onCleanupDownloads(removeRead, removeNonFavorite)
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissRequest) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+            },
+        )
+    }
+
+    @Composable
+    private fun getDownloaderGroup(): Preference.PreferenceGroup {
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        var dialogOpen by remember { mutableStateOf(false) }
+        if (dialogOpen) {
+            CleanupDownloadsDialog(
+                onDismissRequest = { dialogOpen = false },
+                onCleanupDownloads = { removeRead, removeNonFavorite ->
+                    dialogOpen = false
+                    if (job?.isActive == true) return@CleanupDownloadsDialog
+                    context.toast(SYMR.strings.starting_cleanup)
+                    job = scope.launchNonCancellable {
+                        val mangaList = globalAppGraph.getAllManga.await()
+                        val downloadManager: DownloadManager = globalAppGraph.downloadManager
+                        var foldersCleared = 0
+                        globalAppGraph.sourceManager.getOnlineSources().forEach { source ->
+                            val mangaFolders = downloadManager.getMangaFolders(source)
+                            val sourceManga = mangaList
+                                .asSequence()
+                                .filter { it.source == source.id }
+                                .map { it to DiskUtil.buildValidFilename(it.ogTitle) }
+                                .toList()
+
+                            mangaFolders.forEach mangaFolder@{ mangaFolder ->
+                                val manga =
+                                    sourceManga.find { (_, folderName) ->
+                                        folderName == mangaFolder.name
+                                    }?.first
+                                if (manga == null) {
+                                    // download is orphaned delete it
+                                    foldersCleared += 1 + (
+                                        mangaFolder.listFiles()
+                                            .orEmpty().size
+                                        )
+                                    mangaFolder.delete()
+                                } else {
+                                    val chapterList = globalAppGraph.getChaptersByMangaId.await(manga.id)
+                                    foldersCleared += downloadManager.cleanupChapters(
+                                        chapterList,
+                                        manga,
+                                        source,
+                                        removeRead,
+                                        removeNonFavorite,
+                                    )
+                                }
+                            }
+                        }
+                        withUIContext {
+                            val cleanupString =
+                                if (foldersCleared == 0) {
+                                    context.stringResource(SYMR.strings.no_folders_to_cleanup)
+                                } else {
+                                    context.pluralStringResource(
+                                        SYMR.plurals.cleanup_done,
+                                        foldersCleared,
+                                        foldersCleared,
+                                    )
+                                }
+                            context.toast(cleanupString, Toast.LENGTH_LONG)
+                        }
+                    }
+                },
+            )
+        }
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.download_notifier_downloader_title),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(SYMR.strings.clean_up_downloaded_chapters),
+                    subtitle = stringResource(SYMR.strings.delete_unused_chapters),
+                    onClick = { dialogOpen = true },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getDataSaverGroup(): Preference.PreferenceGroup {
+        val sourcePreferences = remember { globalAppGraph.sourcePreferences }
+        return Preference.PreferenceGroup(
+            title = stringResource(SYMR.strings.data_saver),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = sourcePreferences.dataSaver(),
+                    entries = persistentMapOf(
+                        DataSaver.NONE to stringResource(MR.strings.disabled),
+                        DataSaver.BANDWIDTH_HERO to stringResource(SYMR.strings.bandwidth_hero),
+                        DataSaver.WSRV_NL to stringResource(SYMR.strings.wsrv),
+                    ),
+                    title = stringResource(SYMR.strings.data_saver),
+                    subtitle = stringResource(SYMR.strings.data_saver_summary),
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = sourcePreferences.dataSaverServer(),
+                    title = stringResource(SYMR.strings.bandwidth_data_saver_server),
+                    subtitle = stringResource(SYMR.strings.data_saver_server_summary),
+                    dependsOn = PreferenceDependency(
+                        sourcePreferences.dataSaver(),
+                        expected = DataSaver.BANDWIDTH_HERO,
+                    ),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = sourcePreferences.dataSaverDownloader(),
+                    title = stringResource(SYMR.strings.data_saver_downloader),
+                    dependsOn = PreferenceDependency(
+                        sourcePreferences.dataSaver(),
+                        expected = DataSaver.NONE,
+                        invert = true,
+                    ),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = sourcePreferences.dataSaverIgnoreJpeg(),
+                    title = stringResource(SYMR.strings.data_saver_ignore_jpeg),
+                    dependsOn = PreferenceDependency(
+                        sourcePreferences.dataSaver(),
+                        expected = DataSaver.NONE,
+                        invert = true,
+                    ),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = sourcePreferences.dataSaverIgnoreGif(),
+                    title = stringResource(SYMR.strings.data_saver_ignore_gif),
+                    dependsOn = PreferenceDependency(
+                        sourcePreferences.dataSaver(),
+                        expected = DataSaver.NONE,
+                        invert = true,
+                    ),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = sourcePreferences.dataSaverImageQuality(),
+                    entries = listOf(
+                        "10%",
+                        "20%",
+                        "40%",
+                        "50%",
+                        "70%",
+                        "80%",
+                        "90%",
+                        "95%",
+                    ).associateBy { it.trimEnd('%').toInt() }.toImmutableMap(),
+                    title = stringResource(SYMR.strings.data_saver_image_quality),
+                    subtitle = stringResource(SYMR.strings.data_saver_image_quality_summary),
+                    dependsOn = PreferenceDependency(
+                        sourcePreferences.dataSaver(),
+                        expected = DataSaver.NONE,
+                        invert = true,
+                    ),
+                ),
+                run {
+                    val dataSaverImageFormatJpeg by sourcePreferences.dataSaverImageFormatJpeg()
+                        .collectAsState()
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = sourcePreferences.dataSaverImageFormatJpeg(),
+                        title = stringResource(SYMR.strings.data_saver_image_format),
+                        subtitle = if (dataSaverImageFormatJpeg) {
+                            stringResource(SYMR.strings.data_saver_image_format_summary_on)
+                        } else {
+                            stringResource(SYMR.strings.data_saver_image_format_summary_off)
+                        },
+                        dependsOn = PreferenceDependency(
+                            sourcePreferences.dataSaver(),
+                            expected = DataSaver.NONE,
+                            invert = true,
+                        ),
+                    )
+                },
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = sourcePreferences.dataSaverColorBW(),
+                    title = stringResource(SYMR.strings.data_saver_color_bw),
+                    dependsOn = PreferenceDependency(
+                        sourcePreferences.dataSaver(),
+                        expected = DataSaver.BANDWIDTH_HERO,
+                    ),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getDeveloperToolsGroup(): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+        val sourcePreferences = remember { globalAppGraph.sourcePreferences }
+        val exhPreferences = remember { globalAppGraph.exhPreferences }
+        val delegateSourcePreferences = remember { globalAppGraph.delegateSourcePreferences }
+        val securityPreferences = remember { globalAppGraph.securityPreferences }
+        return Preference.PreferenceGroup(
+            title = stringResource(SYMR.strings.developer_tools),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = exhPreferences.isHentaiEnabled(),
+                    title = stringResource(SYMR.strings.toggle_hentai_features),
+                    subtitle = stringResource(SYMR.strings.toggle_hentai_features_summary),
+                    onValueChanged = {
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = sourcePreferences.enableSourceBlacklist(),
+                    title = stringResource(SYMR.strings.enable_source_blacklist),
+                    subtitle = stringResource(
+                        SYMR.strings.enable_source_blacklist_summary,
+                        stringResource(MR.strings.app_name),
+                    ),
+                ),
+                // KMK -->
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = sourcePreferences.extensionWatchdogEnabled(),
+                    title = stringResource(KMR.strings.ext_watchdog_enabled),
+                    subtitle = stringResource(KMR.strings.ext_watchdog_enabled_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = sourcePreferences.extensionErrorTextEnabled(),
+                    title = stringResource(KMR.strings.ext_error_text_enabled),
+                    subtitle = stringResource(KMR.strings.ext_error_text_enabled_summary),
+                ),
+                // KMK <--
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = delegateSourcePreferences.delegateSources(),
+                    title = stringResource(SYMR.strings.toggle_delegated_sources),
+                    subtitle = stringResource(
+                        SYMR.strings.toggle_delegated_sources_summary,
+                        stringResource(MR.strings.app_name),
+                        AndroidSourceManager.DELEGATED_SOURCES.map { it.sourceName }.distinct()
+                            .joinToString(),
+                    ),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    // KMK -->
+                    preference = exhPreferences.logLevel(isDebugBuildType),
+                    // KMK <--
+                    entries = EHLogLevel.entries.mapIndexed { index, ehLogLevel ->
+                        index to "${context.stringResource(ehLogLevel.nameRes)} (${
+                            context.stringResource(ehLogLevel.description)
+                        })"
+                    }.toMap().toImmutableMap(),
+                    title = stringResource(SYMR.strings.log_level),
+                    subtitle = stringResource(SYMR.strings.log_level_summary),
+                ),
+                run {
+                    var enableEncryptDatabase by rememberSaveable { mutableStateOf(false) }
+
+                    if (enableEncryptDatabase) {
+                        val dismiss = { enableEncryptDatabase = false }
+                        AlertDialog(
+                            onDismissRequest = dismiss,
+                            title = { Text(text = stringResource(SYMR.strings.encrypt_database)) },
+                            text = {
+                                Text(
+                                    text = remember {
+                                        HtmlCompat.fromHtml(
+                                            context.stringResource(SYMR.strings.encrypt_database_message),
+                                            HtmlCompat.FROM_HTML_MODE_COMPACT,
+                                        ).toAnnotatedString()
+                                    },
+                                )
+                            },
+                            dismissButton = {
+                                TextButton(onClick = dismiss) {
+                                    Text(text = stringResource(MR.strings.action_cancel))
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        dismiss()
+                                        securityPreferences.encryptDatabase().set(true)
+                                    },
+                                ) {
+                                    Text(text = stringResource(MR.strings.action_ok))
+                                }
+                            },
+                        )
+                    }
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = securityPreferences.encryptDatabase(),
+                        title = stringResource(SYMR.strings.encrypt_database),
+                        subtitle = stringResource(SYMR.strings.encrypt_database_subtitle),
+                        onValueChanged = {
+                            if (it) {
+                                enableEncryptDatabase = true
+                                false
+                            } else {
+                                true
+                            }
+                        },
+                    )
+                },
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(SYMR.strings.open_debug_menu),
+                    subtitle = remember {
+                        HtmlCompat.fromHtml(
+                            context.stringResource(SYMR.strings.open_debug_menu_summary),
+                            HtmlCompat.FROM_HTML_MODE_COMPACT,
+                        ).toAnnotatedString()
+                    },
+                    onClick = { navigator.push(SettingsDebugScreen()) },
+                ),
+            ),
+        )
+    }
+
+    private var job: Job? = null
+    // SY <--
+}

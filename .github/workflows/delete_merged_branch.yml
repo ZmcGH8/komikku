@@ -1,0 +1,27 @@
+name: Delete Merged Branch
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  delete_merged_branch:
+    runs-on: 'ubuntu-24.04'
+    timeout-minutes: 5
+    if: github.event.pull_request.merged == true && github.repository == github.event.pull_request.head.repo.full_name
+    steps:
+      - name: Delete branch
+        run: |
+          branch_name="${{ github.event.pull_request.head.ref }}"
+          if [ "$branch_name" = "main" ] || [ "$branch_name" = "master" ]; then
+            echo "Skipping deletion of main or master branch"
+            exit 0
+          fi
+          # gh api handles ref-name encoding; a checkout is not needed to delete a branch.
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$branch_name"
+          echo "Deleted branch ${branch_name}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

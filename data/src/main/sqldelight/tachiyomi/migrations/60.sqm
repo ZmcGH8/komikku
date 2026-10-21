@@ -1,0 +1,9 @@
+-- KMK -->
+-- Migration 60: per-category library update interval (#25).
+--
+-- NULL means "inherit the global interval", which is how every existing category behaves
+-- after this lands - no backfill, so nothing changes until a category is given its own.
+-- Stored in days because the request is phrased in days ("every 2 weeks") and FetchInterval
+-- already computes intervals in days.
+ALTER TABLE categories ADD COLUMN update_interval INTEGER;
+-- KMK <--

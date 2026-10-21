@@ -1,0 +1,89 @@
+pluginManagement {
+    buildscript {
+        repositories {
+            mavenCentral()
+            maven {
+                url = uri("https://storage.googleapis.com/r8-releases/raw")
+            }
+        }
+        dependencies {
+            classpath("com.android.tools:r8:9.4.17")
+        }
+    }
+    resolutionStrategy {
+        eachPlugin {
+            val regex = "com.android.(library|application)".toRegex()
+            if (regex matches requested.id.id) {
+                useModule("com.android.tools.build:gradle:${requested.version}")
+            }
+        }
+    }
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+        maven(url = "https://www.jitpack.io")
+    }
+}
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
+dependencyResolutionManagement {
+    versionCatalogs {
+        create("kotlinx") {
+            from(files("gradle/kotlinx.versions.toml"))
+        }
+        create("androidx") {
+            from(files("gradle/androidx.versions.toml"))
+        }
+        create("compose") {
+            from(files("gradle/compose.versions.toml"))
+        }
+        create("sylibs") {
+            from(files("gradle/sy.versions.toml"))
+        }
+    }
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        google()
+        maven(url = "https://www.jitpack.io")
+        maven(url = "https://raw.githubusercontent.com/mpreg-ca/androidx-webgpu-repo/main")
+    }
+}
+
+enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+
+rootProject.name = "Houri"
+include(":app")
+include(":core-metadata")
+include(":core:archive")
+include(":core:common")
+include(":core:concurrency")
+include(":core:metro")
+include(":data")
+include(":domain")
+include(":i18n")
+// KMK -->
+include(":i18n-kmk")
+include(":flagkit")
+// KMK <--
+// KMK --> on-device LLM runtime built from the external/llamatik fork (Vulkan-capable)
+include(":llamatik-native")
+// KMK <--
+// SY -->
+include(":i18n-sy")
+// SY <--
+include(":macrobenchmark")
+include(":presentation-core")
+include(":presentation-widget")
+include(":source-api")
+include(":source-local")
+include(":telemetry")
+include(":yakuyomi")
+include(":yakuyomi-stub")
+project(":yakuyomi").projectDir = file("yakuyomi-engine")
+includeBuild("external/yakuyomi-engine")
+includeBuild("external/webgpuviewer-houri")
+includeBuild("external/imagedecoder-houri")

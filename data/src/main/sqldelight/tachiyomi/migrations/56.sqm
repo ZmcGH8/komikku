@@ -1,0 +1,11 @@
+-- KMK -->
+-- Migration 56: track when categories were created and renamed, so #28 can offer
+-- "Date added" / "Date modified" sorting.
+--
+-- 0 means "unknown, predates tracking" and is deliberate: backfilling with the
+-- migration timestamp would give every existing category the same date, making
+-- the sort meaningless until each row is touched. Sorters treat 0 as "fall back
+-- to id", which approximates creation order since ids are monotonic.
+ALTER TABLE categories ADD COLUMN date_added INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE categories ADD COLUMN date_modified INTEGER NOT NULL DEFAULT 0;
+-- KMK <--

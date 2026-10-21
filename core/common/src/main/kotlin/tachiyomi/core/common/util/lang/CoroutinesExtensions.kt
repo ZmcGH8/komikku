@@ -1,0 +1,66 @@
+package tachiyomi.core.common.util.lang
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import mihon.core.concurrency.AppDispatchersHolder
+
+/**
+ * Think twice before using this. This is a delicate API. It is easy to accidentally create resource or memory leaks when GlobalScope is used.
+ *
+ * **Possible replacements**
+ * - suspend function
+ * - custom scope like view or presenter scope
+ */
+@DelicateCoroutinesApi
+fun launchUI(block: suspend CoroutineScope.() -> Unit): Job =
+    GlobalScope.launch(AppDispatchersHolder.get().main, CoroutineStart.DEFAULT, block)
+
+/**
+ * Think twice before using this. This is a delicate API. It is easy to accidentally create resource or memory leaks when GlobalScope is used.
+ *
+ * **Possible replacements**
+ * - suspend function
+ * - custom scope like view or presenter scope
+ */
+@DelicateCoroutinesApi
+fun launchIO(block: suspend CoroutineScope.() -> Unit): Job =
+    GlobalScope.launch(AppDispatchersHolder.get().io, CoroutineStart.DEFAULT, block)
+
+/**
+ * Think twice before using this. This is a delicate API. It is easy to accidentally create resource or memory leaks when GlobalScope is used.
+ *
+ * **Possible replacements**
+ * - suspend function
+ * - custom scope like view or presenter scope
+ */
+@DelicateCoroutinesApi
+fun launchNow(block: suspend CoroutineScope.() -> Unit): Job =
+    GlobalScope.launch(AppDispatchersHolder.get().main, CoroutineStart.UNDISPATCHED, block)
+
+fun CoroutineScope.launchUI(block: suspend CoroutineScope.() -> Unit): Job =
+    launch(AppDispatchersHolder.get().main, block = block)
+
+fun CoroutineScope.launchIO(block: suspend CoroutineScope.() -> Unit): Job =
+    launch(AppDispatchersHolder.get().io, block = block)
+
+fun CoroutineScope.launchNonCancellable(block: suspend CoroutineScope.() -> Unit): Job =
+    launchIO { withContext(NonCancellable, block) }
+
+suspend fun <T> withUIContext(block: suspend CoroutineScope.() -> T) = withContext(
+    AppDispatchersHolder.get().main,
+    block,
+)
+
+suspend fun <T> withIOContext(block: suspend CoroutineScope.() -> T) = withContext(
+    AppDispatchersHolder.get().io,
+    block,
+)
+
+suspend fun <T> withNonCancellableContext(block: suspend CoroutineScope.() -> T) =
+    withContext(NonCancellable, block)

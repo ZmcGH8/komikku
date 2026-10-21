@@ -1,0 +1,250 @@
+-- KMK -->
+-- Migration 61: count chapter numbers, not chapter rows, in libraryView and historyView.
+--
+-- A series published by several groups stores one row per upload, so count(*) reported it as
+-- several times as long. libraryView fed the library's chapter count and unread badge
+-- (totalCount - readCount); historyView fed the History tab's "read of total" progress and its
+-- unfinished-manga filter. Recognised chapter numbers are now counted once each, while chapters
+-- with no usable number are still counted per row since there is nothing to deduplicate them
+-- against. readCount, bookmarkCount and bookmarkReadCount use the same distinct basis on both
+-- views, so the set arithmetic behind LibraryManga.unreadCount cannot go negative.
+--
+-- Each aggregate is wrapped in CAST(... AS INTEGER) rather than left bare. SQLDelight infers the
+-- type of count(DISTINCT CASE ... END) - a CASE with no ELSE has no determinate type - and guessed
+-- REAL for some of these columns and INTEGER for others, which changed the generated mapper
+-- signatures. The cast pins them all to INTEGER.
+--
+-- Views are not re-created by a schema bump on their own, hence the explicit DROP + CREATE.
+DROP VIEW IF EXISTS libraryView;
+
+CREATE VIEW libraryView AS
+SELECT
+    M.*,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.latestUpload, 0) AS latestUpload,
+    coalesce(C.fetchedAt, 0) AS chapterFetchedAt,
+    coalesce(C.lastRead, 0) AS lastRead,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    coalesce(C.bookmarkReadCount, 0) AS bookmarkedReadCount,
+    coalesce(MC.categories, '0') AS categories
+FROM mangas M
+LEFT JOIN (
+    SELECT
+        chapters.manga_id,
+        -- Count chapter NUMBERS, not rows. Two scanlators uploading the same chapter are
+        -- one chapter to the reader, so a plain row count reported a series with three groups as
+        -- three times as long and inflated the unread badge (LibraryManga.unreadCount is derived
+        -- from these). Recognised numbers are counted once each; chapters with no usable number
+        -- (extras, oneshots) have nothing to deduplicate against and are still counted per row.
+        -- The same four aggregates are all distinct-based so the set arithmetic in unreadCount
+        -- (total - bookmark - (read - bookmarkRead)) stays non-negative: a number is counted as
+        -- read or bookmarked if any of its uploads is, which keeps each set a subset of total.
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS total,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.read = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS readCount,
+        coalesce(max(chapters.date_upload), 0) AS latestUpload,
+        coalesce(max(history.last_read), 0) AS lastRead,
+        coalesce(max(chapters.date_fetch), 0) AS fetchedAt,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.bookmark = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.bookmark = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkCount,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                    AND chapters.bookmark = 1 AND chapters.read = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0
+                AND chapters.bookmark = 1 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkReadCount,
+        excluded_scanlators.scanlator AS ex_scanlator
+    FROM chapters
+    LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+    LEFT JOIN history
+    ON chapters._id = history.chapter_id
+    -- blacklisted chapters are hidden on the details screen, so they must not be
+    -- counted here either. Key format matches scanlatorBlacklistKey(): rounded number@scanlator.
+    LEFT JOIN mangas BM
+    ON BM._id = chapters.manga_id
+    WHERE ex_scanlator IS NULL
+    AND (
+        BM.blacklisted_chapters = ''
+        OR instr(
+            ', ' || BM.blacklisted_chapters || ', ',
+            ', ' || CAST(round(chapters.chapter_number * 100) / 100.0 AS TEXT)
+                || '@' || coalesce(chapters.scanlator, '') || ', '
+        ) = 0
+    )
+    GROUP BY chapters.manga_id
+) AS C
+ON M._id = C.manga_id
+LEFT JOIN (
+    SELECT manga_id, group_concat(category_id) AS categories
+    FROM mangas_categories
+    GROUP BY manga_id
+) AS MC
+ON MC.manga_id = M._id
+WHERE M.source <> 6969
+UNION
+SELECT
+    M.*,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.latestUpload, 0) AS latestUpload,
+    coalesce(C.fetchedAt, 0) AS chapterFetchedAt,
+    coalesce(C.lastRead, 0) AS lastRead,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    coalesce(C.bookmarkReadCount, 0) AS bookmarkedReadCount,
+    coalesce(MC.categories, '0') AS categories
+FROM mangas M
+LEFT JOIN (
+    SELECT merged.manga_id,merged.merge_id
+    FROM merged
+    GROUP BY merged.merge_id
+) AS ME
+ON ME.merge_id = M._id
+LEFT JOIN(
+    SELECT
+        ME.merge_id,
+        -- Same distinct-chapter-number counting as the non-merged branch above, and it
+        -- matters more here: chapters arrive from every manga in the merge, so the same number is
+        -- routinely present several times over.
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS total,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.read = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS readCount,
+        coalesce(max(chapters.date_upload), 0) AS latestUpload,
+        coalesce(max(history.last_read), 0) AS lastRead,
+        coalesce(max(chapters.date_fetch), 0) AS fetchedAt,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.bookmark = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.bookmark = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkCount,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                    AND chapters.bookmark = 1 AND chapters.read = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0
+                AND chapters.bookmark = 1 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkReadCount,
+        excluded_scanlators.scanlator AS ex_scanlator
+    FROM chapters
+    LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+    LEFT JOIN history
+    ON chapters._id = history.chapter_id
+    LEFT JOIN merged ME
+    ON ME.manga_id = chapters.manga_id
+    -- merged entries keep the blacklist on the parent, which is ME.merge_id
+    LEFT JOIN mangas BM
+    ON BM._id = ME.merge_id
+    WHERE ex_scanlator IS NULL
+    AND (
+        BM.blacklisted_chapters = ''
+        OR instr(
+            ', ' || BM.blacklisted_chapters || ', ',
+            ', ' || CAST(round(chapters.chapter_number * 100) / 100.0 AS TEXT)
+                || '@' || coalesce(chapters.scanlator, '') || ', '
+        ) = 0
+    )
+    GROUP BY ME.merge_id
+) AS C
+ON M._id = C.merge_id  -- ON ME.merge_id = C.merge_id
+LEFT JOIN (
+    SELECT manga_id, group_concat(category_id) AS categories
+    FROM mangas_categories
+    GROUP BY manga_id
+) AS MC
+ON MC.manga_id = M._id
+WHERE M.source = 6969;
+DROP VIEW IF EXISTS historyView;
+
+CREATE VIEW historyView AS
+SELECT
+    history._id AS id,
+    mangas._id AS mangaId,
+    chapters._id AS chapterId,
+    mangas.title,
+    mangas.thumbnail_url AS thumbnailUrl,
+    mangas.source,
+    mangas.favorite,
+    mangas.cover_last_modified,
+    chapters.chapter_number AS chapterNumber,
+    mangas.chapter_flags AS chapterFlags,
+    chapters.read AS read,
+    chapters.last_page_read AS lastPageRead,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    coalesce(C.bookmarkReadCount, 0) AS bookmarkReadCount,
+    history.last_read AS readAt,
+    history.time_read AS readDuration,
+    max_last_read.last_read AS maxReadAt,
+    max_last_read.chapter_id AS maxReadAtChapterId
+FROM mangas
+JOIN chapters
+ON mangas._id = chapters.manga_id
+JOIN history
+ON chapters._id = history.chapter_id
+JOIN (
+    SELECT chapters.manga_id,chapters._id AS chapter_id, MAX(history.last_read) AS last_read
+    FROM chapters JOIN history
+    ON chapters._id = history.chapter_id
+    GROUP BY chapters.manga_id
+) AS max_last_read
+ON chapters.manga_id = max_last_read.manga_id
+LEFT JOIN(
+    SELECT
+        chapters.manga_id,
+        -- Same chapter-number counting as libraryView, for the same reason: a series with
+        -- several scanlator groups stores one row per upload, so count(*) made the History tab's
+        -- "read of total" progress and its unfinished filter count a chapter once per group. All
+        -- four aggregates share one distinct basis so the arithmetic below cannot go negative.
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS total,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.read = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS readCount,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.bookmark = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.bookmark = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkCount,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                AND chapters.bookmark = 1 AND chapters.read = 1
+            THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END) AS INTEGER
+        ) AS bookmarkReadCount,
+        excluded_scanlators.scanlator AS ex_scanlator
+    FROM chapters
+    LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+    WHERE ex_scanlator IS NULL
+    GROUP BY chapters.manga_id
+) AS C
+ON mangas._id = C.manga_id;
+-- KMK <--

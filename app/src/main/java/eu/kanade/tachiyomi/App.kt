@@ -1,0 +1,643 @@
+package eu.kanade.tachiyomi
+
+import android.annotation.SuppressLint
+import android.app.Application
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.BitmapFactory
+import android.os.Build
+import android.os.Looper
+import android.webkit.WebView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import androidx.work.Configuration
+import androidx.work.WorkManager
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.disk.directory
+import coil3.memory.MemoryCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.allowRgb565
+import coil3.request.crossfade
+import coil3.util.DebugLogger
+import com.elvishew.xlog.LogConfiguration
+import com.elvishew.xlog.LogLevel
+import com.elvishew.xlog.XLog
+import com.elvishew.xlog.printer.AndroidPrinter
+import com.elvishew.xlog.printer.Printer
+import com.elvishew.xlog.printer.file.backup.NeverBackupStrategy
+import com.elvishew.xlog.printer.file.naming.DateFileNameGenerator
+import dev.mihon.injekt.patchInjekt
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.createGraphFactory
+import eu.kanade.domain.DomainModule
+import eu.kanade.domain.KMKDomainModule
+import eu.kanade.domain.SYDomainModule
+import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.sync.SyncPreferences
+import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
+import eu.kanade.tachiyomi.core.security.PrivacyPreferences
+import eu.kanade.tachiyomi.crash.CrashActivity
+import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
+import eu.kanade.tachiyomi.data.coil.BufferedSourceFetcher
+import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher
+import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
+import eu.kanade.tachiyomi.data.coil.MangaCoverMetadata
+import eu.kanade.tachiyomi.data.coil.MangaKeyer
+import eu.kanade.tachiyomi.data.coil.PagePreviewFetcher
+import eu.kanade.tachiyomi.data.coil.PagePreviewKeyer
+import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
+import eu.kanade.tachiyomi.data.connections.discord.DiscordRPCService
+import eu.kanade.tachiyomi.data.database.DatabaseMaintenanceManager
+import eu.kanade.tachiyomi.data.event.AppEvent
+import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.data.sync.SyncDataJob
+import eu.kanade.tachiyomi.di.AppModule
+import eu.kanade.tachiyomi.di.PreferenceModule
+import eu.kanade.tachiyomi.di.SYPreferenceModule
+import eu.kanade.tachiyomi.extension.ExtensionAutoUpdateWorker
+import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegate
+import eu.kanade.tachiyomi.util.CrashLogUtil
+import eu.kanade.tachiyomi.util.system.DeviceUtil
+import eu.kanade.tachiyomi.util.system.GLUtil
+import eu.kanade.tachiyomi.util.system.WebViewUtil
+import eu.kanade.tachiyomi.util.system.animatorDurationScale
+import eu.kanade.tachiyomi.util.system.cancelNotification
+import eu.kanade.tachiyomi.util.system.isDebugBuildType
+import eu.kanade.tachiyomi.util.system.isPreviewBuildType
+import eu.kanade.tachiyomi.util.system.notify
+import eu.kanade.tachiyomi.util.system.telemetryIncluded
+import exh.log.CrashlyticsPrinter
+import exh.log.EHLogLevel
+import exh.log.EnhancedFilePrinter
+import exh.log.XLogLogcatLogger
+import exh.log.xLogD
+import exh.log.xLogE
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import logcat.AndroidLogcatLogger
+import logcat.LogPriority
+import logcat.LogcatLogger
+import mihon.app.di.AppGraph
+import mihon.app.di.globalAppGraph
+import mihon.app.di.injekt.MetroInteropModule
+import mihon.core.archive.CbzCrypto
+import mihon.core.metro.GraphProvider
+import mihon.core.migration.Migrator
+import mihon.core.migration.migrations.migrations
+import mihon.telemetry.TelemetryConfig
+import org.conscrypt.Conscrypt
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.preference.Preference
+import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.ImageUtil
+import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.manga.model.CustomMangaInfoLookup
+import tachiyomi.domain.storage.service.StorageManager
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.widget.WidgetManager
+import timber.log.Timber
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.addSingleton
+import uy.kohesive.injekt.api.get
+import uy.kohesive.injekt.injectLazy
+import java.security.Security
+import java.text.SimpleDateFormat
+import java.util.Locale
+
+class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factory, GraphProvider<AppGraph> {
+
+    override val graph: AppGraph by lazy {
+        createGraphFactory<AppGraph.Factory>().create(context = this)
+    }
+
+    @Inject private lateinit var injektMetroInteropModule: MetroInteropModule
+
+    private val basePreferences: BasePreferences by injectLazy()
+    private val privacyPreferences: PrivacyPreferences by injectLazy()
+
+    private val disableIncognitoReceiver = DisableIncognitoReceiver()
+
+    @SuppressLint("LaunchActivityFromNotification")
+    override fun onCreate() {
+        super<Application>.onCreate()
+        // KMK --> domain has no BuildConfig; drop MTL-engine achievements from
+        // the catalog on nomtl builds before anything reads it (lazy).
+        tachiyomi.domain.achievement.model.Achievements.excludeMtlOnly = BuildConfig.IS_NOMTL
+        patchInjekt()
+        Injekt.addSingleton<Application>(this)
+        Injekt.addSingleton<Context>(this)
+
+        // Old Injekt modules must be imported BEFORE graph.inject() because
+        // graph construction triggers injectLazy() calls that resolve via PatchedDefaultRegister
+        Injekt.importModule(PreferenceModule(this))
+        Injekt.importModule(AppModule(this))
+        Injekt.importModule(DomainModule())
+        // KMK -->
+        Injekt.importModule(KMKDomainModule())
+        // KMK <--
+        // SY -->
+        Injekt.importModule(SYPreferenceModule(this))
+        Injekt.importModule(SYDomainModule())
+        // SY <--
+
+        // KMK -->
+        // Expose the graph to non-Context classes (tracker services, etc.)
+        // Must be set BEFORE graph.inject(): eager construction during injection
+        // (TrackerManager -> MdList -> BaseTracker) reads globalAppGraph.
+        globalAppGraph = graph
+
+        // Keeps reads and writes on Metro's single CustomMangaRepositoryImpl.
+        CustomMangaInfoLookup.resolve = { mangaId -> globalAppGraph.getCustomMangaInfo.get(mangaId) }
+        // KMK <--
+
+        graph.inject(this)
+
+        // KMK --> single AppDispatchers instance for GlobalScope helpers + DI
+        mihon.core.concurrency.AppDispatchersHolder.set(globalAppGraph.appDispatchers)
+        // KMK <--
+
+        // KMK -->
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            kotlinx.coroutines.delay(2000)
+            val manager = if (globalAppGraph.securityPreferences.encryptDatabase().get()) {
+                DatabaseMaintenanceManager(this@App, CbzCrypto.DATABASE_NAME, CbzCrypto.getDecryptedPasswordSql())
+            } else {
+                DatabaseMaintenanceManager(this@App)
+            }
+            runCatching { manager.performStartupMaintenance() }
+                .onFailure { xLogE("Database startup maintenance failed", it) }
+        }
+
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            kotlinx.coroutines.delay(500)
+            runCatching { globalAppGraph.deleteOrphanedSubcategories.await() }
+                .onFailure { xLogE("Failed to delete orphaned subcategories", it) }
+        }
+
+        // KMK --> The update APK used to survive every install, because nothing ever removed it and
+        // a release APK is tens of megabytes. Start is the only point where "is this still needed?"
+        // is answerable: the archive's version against the running one.
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            runCatching { eu.kanade.tachiyomi.data.updater.UpdateApkStore.cleanUpIfUnneeded(this@App) }
+                .onFailure { xLogE("Failed to clean up the downloaded update APK", it) }
+        }
+        // KMK <--
+
+        val yakuyomiPrefs = globalAppGraph.translationPreferences
+        val localLlm = globalAppGraph.localLlmManager
+        if (!BuildConfig.IS_NOMTL && yakuyomiPrefs.localLlmAutoStart().get() && localLlm.isLocalProvider()) {
+            ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+                kotlinx.coroutines.delay(5000)
+                runCatching { localLlm.start() }
+                    .onFailure { xLogE("Failed to auto-start local LLM engine", it) }
+            }
+        }
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            runCatching { globalAppGraph.achievementNotifier.start() }
+                .onFailure { xLogE("Failed to start achievement notifier", it) }
+        }
+        // KMK --> Achievements: hold unlocks until onboarding has been completed — onboarding is
+        // where the enable/disable choice is made, and the feature hooks below evaluate their
+        // settings once at install, so arming this after them would let a default-on preference
+        // unlock before the reader had chosen anything at all. Armed from the real onboarding
+        // preference (in-memory mirror; the domain cannot see the class that owns the key),
+        // released by OnboardingScreen when it finishes. Restore is unaffected: it rewrites the
+        // unlocked set directly, and one launched from onboarding runs after the release.
+        runCatching {
+            globalAppGraph.achievementPreferences.unlocksHeldForOnboarding =
+                !globalAppGraph.basePreferences.shownOnboardingFlow().get()
+        }.onFailure { xLogE("Failed to arm the onboarding achievement hold", it) }
+        // KMK <--
+        // KMK --> Process start is the only moment "opened the app at 03:33" can be true.
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            val now = java.util.Calendar.getInstance()
+            runCatching {
+                globalAppGraph.achievementManager.onAppOpenedAt(
+                    now.get(java.util.Calendar.HOUR_OF_DAY),
+                    now.get(java.util.Calendar.MINUTE),
+                )
+            }.onFailure { xLogE("Failed to check app-open achievements", it) }
+        }
+        // KMK --> Also the daily pass: a stale-unstarted entry joins the backlog purely because
+        // 30 days elapsed, and nothing else fires on that. Forced so it is exact on every start.
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            kotlinx.coroutines.delay(3000)
+            runCatching { globalAppGraph.achievementManager.refreshBacklog(force = true) }
+                .onFailure { xLogE("Failed to refresh achievement backlog", it) }
+        }
+        // KMK --> Roll the rotating pool over on process start. Nothing else did this reliably -
+        // the only other caller was the achievements screen, so an id that was on show yesterday
+        // kept counting all week to anyone who only opened that screen on Monday.
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            runCatching { globalAppGraph.rotatingAchievementPool.refreshIfNeeded() }
+                .onFailure { xLogE("Failed to roll achievement rotation", it) }
+        }
+        // KMK -->
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            kotlinx.coroutines.delay(1500)
+            runCatching {
+                eu.kanade.tachiyomi.data.achievement.FeatureAchievementHooks(
+                    manager = globalAppGraph.achievementManager,
+                    uiPreferences = globalAppGraph.uiPreferences,
+                    connectionsPreferences = globalAppGraph.connectionsPreferences,
+                    webhookPreferences = globalAppGraph.webhookPreferences,
+                    readerPreferences = globalAppGraph.readerPreferences,
+                    translationPreferences = globalAppGraph.translationPreferences,
+                    libraryPreferences = globalAppGraph.libraryPreferences,
+                ).install(this)
+            }.onFailure { xLogE("Failed to install feature achievement hooks", it) }
+        }
+        // KMK <--
+        // KMK -->
+        runCatching { eu.kanade.tachiyomi.ui.reader.viewer.ViewerRegistry.register(eu.kanade.tachiyomi.ui.reader.viewer.novel.NovelViewerProvider) }
+            .onFailure { xLogE("Failed to register novel viewer", it) }
+        // Touched for its `init`: a Kotlin object body only runs on first access, so without this
+        // the novel typography keys never reach SettingsRegistry and the global key-uniqueness
+        // check silently does nothing.
+        runCatching { eu.kanade.tachiyomi.ui.reader.setting.NovelTypographySettingsHost }
+            .onFailure { xLogE("Failed to register novel typography settings", it) }
+        // KMK <--
+        // KMK <--
+        // MetroInteropModule bridges Metro singletons to Injekt for extension backwards compat;
+        // must be imported AFTER graph.inject() so Metro graph is built
+        Injekt.importModule(injektMetroInteropModule)
+
+        TelemetryConfig.init(
+            applicationContext,
+            isPreviewBuildType,
+            BuildConfig.COMMIT_COUNT,
+        )
+
+        // KMK -->
+        if (isDebugBuildType) Timber.plant(Timber.DebugTree())
+        // KMK <--
+
+        GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
+
+        // TLS 1.3 support for Android < 10
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            Security.insertProviderAt(Conscrypt.newProvider(), 1)
+        }
+
+        // Avoid potential crashes
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val process = getProcessName()
+            if (packageName != process) {
+                // KMK -->
+                // The :error_handler process re-runs onCreate and can reach this
+                // with WebView already initialized; setDataDirectorySuffix then
+                // throws and would kill the crash screen itself.
+                runCatching { WebView.setDataDirectorySuffix(process) }
+                // KMK <--
+            }
+        }
+
+        setupExhLogging() // EXH logging
+        if (!LogcatLogger.isInstalled) {
+            val minLogPriority = when {
+                // KMK -->
+                EHLogLevel.isExtraLogging() -> LogPriority.VERBOSE
+                // KMK <--
+                BuildConfig.DEBUG -> LogPriority.DEBUG
+                else -> LogPriority.INFO
+            }
+            LogcatLogger.install()
+            LogcatLogger.loggers += XLogLogcatLogger() // SY Redirect Logcat to XLog
+            LogcatLogger.loggers += AndroidLogcatLogger(minLogPriority)
+        }
+
+        setupNotificationChannels()
+
+        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
+
+        val scope = ProcessLifecycleOwner.get().lifecycleScope
+
+        // Show notification to disable Incognito Mode when it's enabled
+        basePreferences.incognitoMode().changes()
+            .onEach { enabled ->
+                if (enabled) {
+                    disableIncognitoReceiver.register()
+                    notify(
+                        Notifications.ID_INCOGNITO_MODE,
+                        Notifications.CHANNEL_INCOGNITO_MODE,
+                    ) {
+                        setContentTitle(stringResource(MR.strings.pref_incognito_mode))
+                        setContentText(stringResource(MR.strings.notification_incognito_text))
+                        setSmallIcon(R.drawable.ic_glasses_with_hat_24dp)
+                        setColor(ContextCompat.getColor(applicationContext, R.color.ic_launcher))
+                        setLargeIcon(BitmapFactory.decodeResource(applicationContext.resources, R.drawable.houri))
+                        setOngoing(true)
+
+                        val pendingIntent = PendingIntent.getBroadcast(
+                            this@App,
+                            0,
+                            Intent(ACTION_DISABLE_INCOGNITO_MODE).setPackage(BuildConfig.APPLICATION_ID),
+                            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
+                        )
+                        setContentIntent(pendingIntent)
+                    }
+                } else {
+                    disableIncognitoReceiver.unregister()
+                    cancelNotification(Notifications.ID_INCOGNITO_MODE)
+                }
+            }
+            .launchIn(scope)
+
+        privacyPreferences.analytics()
+            .changes()
+            .onEach(TelemetryConfig::setAnalyticsEnabled)
+            .launchIn(scope)
+
+        privacyPreferences.crashlytics()
+            .changes()
+            .onEach(TelemetryConfig::setCrashlyticsEnabled)
+            .launchIn(scope)
+
+        basePreferences.hardwareBitmapThreshold().let { preference ->
+            if (!preference.isSet()) preference.set(GLUtil.DEVICE_TEXTURE_LIMIT)
+        }
+
+        basePreferences.hardwareBitmapThreshold().changes()
+            .onEach { ImageUtil.hardwareBitmapThreshold = it }
+            .launchIn(scope)
+
+        setAppCompatDelegateThemeMode(globalAppGraph.uiPreferences.themeMode().get())
+
+        // KMK --> Seeded here so RAM-gated settings rows compose against the real bypass
+        // value instead of the default false. Without it, a user who already disabled the gate
+        // on a previous launch still saw every gated AI category hidden.
+        eu.kanade.presentation.more.settings.RamGateState.seed(this)
+        // KMK <--
+
+        ProcessLifecycleOwner.get().lifecycleScope.launchIO {
+            runCatching { MangaCoverMetadata.load() }
+                .onFailure { xLogE("Failed to load cover metadata", it) }
+        }
+
+        with(this@App) {
+            WidgetManager(globalAppGraph.getUpdates, globalAppGraph.securityPreferences).init(scope)
+        }
+
+        if (!WorkManager.isInitialized()) {
+            WorkManager.initialize(this, Configuration.Builder().build())
+        }
+        val syncPreferences: SyncPreferences = globalAppGraph.syncPreferences
+        val syncTriggerOpt = syncPreferences.getSyncTriggerOptions()
+        if (syncPreferences.isSyncEnabled() && syncTriggerOpt.syncOnAppStart) {
+            SyncDataJob.startNow(this@App)
+        }
+
+        // KMK --> After WorkManager is up. Reconciled on every app start rather than only when
+        // the setting changes, so a build that introduced the worker picks it up, a reboot does not
+        // lose it, and switching installer to one that cannot update silently cancels it.
+        ExtensionAutoUpdateWorker.schedule(this@App)
+
+        initializeMigrator()
+    }
+
+    private fun setupInjekt() {
+        Injekt.addSingleton<Application>(this)
+        Injekt.addSingleton<Context>(this)
+        Injekt.importModule(injektMetroInteropModule)
+    }
+
+    private fun initializeMigrator() {
+        val preferenceStore = globalAppGraph.preferenceStore
+        // SY -->
+        val preference = preferenceStore.getInt(Preference.appStateKey("eh_last_version_code"), 0)
+        // SY <--
+        val oldVersionCode = preference.get()
+        logcat { "Migration from $oldVersionCode to ${BuildConfig.VERSION_CODE}" }
+        Migrator.initialize(
+            old = preference.get(),
+            new = BuildConfig.VERSION_CODE,
+            migrations = migrations,
+            onMigrationComplete = {
+                logcat { "Updating last version to ${BuildConfig.VERSION_CODE}" }
+                preference.set(BuildConfig.VERSION_CODE)
+                // KMK -->
+                globalAppGraph.appEventBus.emit(
+                    AppEvent.AppUpdated(
+                        previousVersionCode = oldVersionCode,
+                        newVersionCode = BuildConfig.VERSION_CODE,
+                    ),
+                )
+                // KMK <--
+            },
+        )
+    }
+
+    override fun newImageLoader(context: Context): ImageLoader {
+        return ImageLoader.Builder(this).apply {
+            val callFactoryLazy = lazy { globalAppGraph.networkHelper.client }
+            components {
+                // NetworkFetcher.Factory
+                add(OkHttpNetworkFetcherFactory(callFactoryLazy::value))
+                // Decoder.Factory
+                add(TachiyomiImageDecoder.Factory())
+                // Mihon -->
+                add(eu.kanade.tachiyomi.data.coil.NewImageDecoder.Factory())
+                // Mihon <--
+                // Fetcher.Factory
+                add(BufferedSourceFetcher.Factory())
+                add(MangaCoverFetcher.MangaCoverFactory(callFactoryLazy))
+                add(MangaCoverFetcher.MangaFactory(callFactoryLazy))
+                // Keyer
+                add(MangaCoverKeyer())
+                add(MangaKeyer())
+                // SY -->
+                add(PagePreviewKeyer())
+                add(PagePreviewFetcher.Factory(callFactoryLazy))
+                // SY <--
+            }
+
+            diskCache(
+                DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("image_cache"))
+                    .maxSizePercent(0.02)
+                    .build(),
+            )
+
+            val isLowRam = DeviceUtil.isLowRamDevice(this@App)
+            memoryCache(
+                MemoryCache.Builder()
+                    .maxSizePercent(context, if (isLowRam) 0.12 else 0.18)
+                    .build(),
+            )
+
+            // With system animations off the scale is 0, which turns the crossfade into a
+            // zero-duration transition that still allocates and drives an animation per image load -
+            // across a library scroll that is a lot of wasted frames for something the user asked
+            // to have no animation. Omitting crossfade entirely is also what the platform does.
+            val imageAnimatorScale = animatorDurationScale
+            if (imageAnimatorScale > 0f) {
+                crossfade((300 * imageAnimatorScale).toInt())
+            }
+            allowRgb565(isLowRam)
+            // KMK -->
+            if (EHLogLevel.isExtraLogging()) logger(DebugLogger())
+            // KMK <--
+
+            fetcherCoroutineContext(
+                mihon.core.concurrency.AppDispatchersHolder.get().io
+                    .limitedParallelism(if (isLowRam) 4 else 6),
+            )
+            decoderCoroutineContext(
+                mihon.core.concurrency.AppDispatchersHolder.get().io.limitedParallelism(2),
+            )
+        }
+            .build()
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        SecureActivityDelegate.onApplicationStart()
+
+        val syncPreferences: SyncPreferences = globalAppGraph.syncPreferences
+        val syncTriggerOpt = syncPreferences.getSyncTriggerOptions()
+        if (syncPreferences.isSyncEnabled() && syncTriggerOpt.syncOnAppResume) {
+            SyncDataJob.startNow(this@App)
+        }
+
+        // AM (DISCORD) -->
+        DiscordRPCService.start(applicationContext)
+        // <-- AM (DISCORD)
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        SecureActivityDelegate.onApplicationStopped()
+
+        // AM (DISCORD) -->
+        DiscordRPCService.stop(applicationContext)
+        // <-- AM (DISCORD)
+    }
+
+    override fun getPackageName(): String {
+        try {
+            // Override the value passed as X-Requested-With in WebView requests
+            val stackTrace = Looper.getMainLooper().thread.stackTrace
+            // KMK -->
+            val chromiumClasses = setOf("org.chromium.base.buildinfo", "org.chromium.base.apkinfo")
+            val chromiumMethods = setOf("getall", "getpackagename", "<init>")
+            // KMK <--
+            val isChromiumCall = stackTrace.any { trace ->
+                trace.className.lowercase() in chromiumClasses &&
+                    trace.methodName.lowercase() in chromiumMethods
+            }
+
+            if (isChromiumCall) return WebViewUtil.spoofedPackageName(applicationContext)
+        } catch (_: Exception) {
+        }
+
+        return super.getPackageName()
+    }
+
+    private fun setupNotificationChannels() {
+        try {
+            Notifications.createChannels(this)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to modify notification channels" }
+        }
+    }
+
+    // EXH
+    private fun setupExhLogging() {
+        EHLogLevel.init(
+            this,
+            // KMK -->
+            isDebugBuildType = isDebugBuildType,
+            // KMK <--
+        )
+
+        val logLevel = when {
+            // KMK -->
+            EHLogLevel.isExtremeLogging() -> LogLevel.ALL
+            EHLogLevel.isExtraLogging() -> LogLevel.DEBUG
+            // KMK <--
+            else -> LogLevel.WARN
+        }
+
+        val logConfig = LogConfiguration.Builder()
+            .logLevel(logLevel)
+            .disableStackTrace()
+            .disableBorder()
+            .build()
+
+        val printers = mutableListOf<Printer>(AndroidPrinter())
+
+        val logFolder = globalAppGraph.storageManager.getLogsDirectory()
+
+        if (logFolder != null) {
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+
+            printers += EnhancedFilePrinter
+                .Builder(logFolder) {
+                    fileNameGenerator = object : DateFileNameGenerator() {
+                        override fun generateFileName(logLevel: Int, timestamp: Long): String {
+                            return super.generateFileName(
+                                logLevel,
+                                timestamp,
+                            ) + "-${BuildConfig.BUILD_TYPE}.txt"
+                        }
+                    }
+                    flattener { timeMillis, level, tag, message ->
+                        "${dateFormat.format(timeMillis)} ${LogLevel.getShortLevelName(level)}/$tag: $message"
+                    }
+                    backupStrategy = NeverBackupStrategy()
+                }
+        }
+
+        // Install Crashlytics in prod
+        if (telemetryIncluded) {
+            printers += CrashlyticsPrinter(LogLevel.ERROR)
+        }
+
+        XLog.init(
+            logConfig,
+            *printers.toTypedArray(),
+        )
+
+        xLogD("Application booting...")
+        xLogD(CrashLogUtil(applicationContext).getDebugInfo())
+    }
+
+    private inner class DisableIncognitoReceiver : BroadcastReceiver() {
+        private var registered = false
+
+        override fun onReceive(context: Context, intent: Intent) {
+            basePreferences.incognitoMode().set(false)
+        }
+
+        fun register() {
+            if (!registered) {
+                ContextCompat.registerReceiver(
+                    this@App,
+                    this,
+                    IntentFilter(ACTION_DISABLE_INCOGNITO_MODE),
+                    ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
+                registered = true
+            }
+        }
+
+        fun unregister() {
+            if (registered) {
+                unregisterReceiver(this)
+                registered = false
+            }
+        }
+    }
+}
+
+private const val ACTION_DISABLE_INCOGNITO_MODE = "tachi.action.DISABLE_INCOGNITO_MODE"

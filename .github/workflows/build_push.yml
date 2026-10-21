@@ -1,0 +1,255 @@
+name: CI
+on:
+  push:
+    branches:
+      # - develop
+      - master
+    paths:
+      - '**'
+      - '!**.md'
+      - '!.github/**'
+  # pull_request:
+  #   paths-ignore:
+  #     - '**.md'
+  # Dispatch or Manual triggers
+  workflow_dispatch:
+    inputs:
+      clear-native-cache:
+        description: 'Bust native .cxx cache (poisoned empty meson arg / chmod)'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build app
+    runs-on: 'ubuntu-24.04'
+    environment: Primary
+    timeout-minutes: 120
+
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          # external/llamatik nests llama.cpp as a submodule of its own, so the checkout must be recursive.
+          submodules: recursive
+
+      - name: Set up JDK
+        uses: actions/setup-java@1bcf9fb12cf4aa7d266a90ae39939e61372fe520 # v5.4.0
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - name: Write google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printenv GOOGLE_SERVICES_JSON | base64 -d > app/google-services.json
+          else
+            echo "GOOGLE_SERVICES_JSON not set; skipping (build will use dummy if needed)"
+          fi
+
+      - name: Write client_secrets.json
+        env:
+          GOOGLE_CLIENT_SECRETS_JSON: ${{ secrets.GOOGLE_CLIENT_SECRETS_JSON }}
+        run: |
+          mkdir -p app/src/main/assets
+          if [ -n "$GOOGLE_CLIENT_SECRETS_JSON" ]; then
+            printenv GOOGLE_CLIENT_SECRETS_JSON | base64 -d > app/src/main/assets/client_secrets.json
+          else
+            echo "GOOGLE_CLIENT_SECRETS_JSON not set; skipping"
+          fi
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/build_push.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
+      - name: Install Vulkan headers for the MTL on-device LLM
+        run: |
+          # :llamatik-native compiles ggml's Vulkan backend, which needs a shader compiler
+          # plus Vulkan-Hpp and SPIRV-Headers. None of those are usable from the Android
+          # SDK: the NDK hides its bundled glslc from find_package(Vulkan), and no SDK ships
+          # Vulkan-Hpp. wsl-setup.sh does the same staging the local WSL build uses, and its
+          # NDK probe also matches this runner's SDK location. Keep in sync with
+          # llamatik-native/BUILD.md.
+          sudo apt-get update
+          sudo apt-get install -y glslc
+          bash llamatik-native/wsl-setup.sh --headers-only
+          glslc --version
+          test -f /opt/vulkan-headers/vulkan/vulkan.hpp
+          test -f /opt/vulkan-headers/vk_video/vulkan_video_codec_av1std.h
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config ninja-build cmake python3 python3-pip nasm gperf libltdl-dev libglib2.0-dev texinfo ccache
+          pip3 install --upgrade meson  # apt meson 1.3.2 is too old for glib 2.89.0 (>=1.4.0); pip gives 1.7.0
+          cmake --version
+          meson --version
+          ninja --version
+          pkg-config --version
+          nasm --version
+          ccache --version
+
+      - name: Add swap space (8GB)
+        run: |
+          if swapon --show | grep -q /swapfile; then
+            echo "Swap already active"
+          else
+            sudo fallocate -l 8G /swapfile
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+          fi
+          free -h
+
+      - name: Install Android SDK CMake 3.22.1
+        run: |
+          echo "Installing cmake 3.22.1 via sdkmanager..."
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -f "$SDKMGR" ]; then SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"; fi
+          if [ ! -f "$SDKMGR" ]; then SDKMGR=$(find "$ANDROID_HOME" -name sdkmanager -type f 2>/dev/null | head -n1); fi
+          if [ -f "$SDKMGR" ]; then
+            echo "Found sdkmanager at $SDKMGR"
+            yes | "$SDKMGR" --install "cmake;3.22.1" || yes | sudo "$SDKMGR" --install "cmake;3.22.1" || echo "sdkmanager install failed, will try alternative"
+            "$SDKMGR" --list | grep cmake || true
+          else
+            echo "sdkmanager not found, searching SDK..."
+            ls -R "$ANDROID_HOME" 2>/dev/null | head -n 50 || true
+            ls -R "$ANDROID_SDK_ROOT" 2>/dev/null | head -n 50 || true
+          fi
+          ls -d "$ANDROID_HOME/cmake/3.22.1" 2>/dev/null && echo "cmake 3.22.1 installed" || echo "cmake dir not found, checking alternatives"
+          ls -d "$ANDROID_SDK_ROOT/cmake/3.22.1" 2>/dev/null && echo "cmake 3.22.1 installed (SDK_ROOT)" || true
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-ccache-${{ hashFiles('external/imagedecoder-houri/library/src/main/cpp/**', 'gradle/libs.versions.toml', 'external/webgpuviewer-houri/library/src/main/cpp/**') }}
+          max-size: 2G
+          verbose: 1
+
+      - name: Clean stale native cache (bust poisoned .cxx)
+        run: |
+          echo "Checking for poisoned native cache..."
+          if [ "${{ inputs.clear-native-cache }}" == "true" ]; then
+              echo "Manual bust requested via workflow_dispatch, removing .cxx"
+              rm -rf external/imagedecoder-houri/library/.cxx
+            elif [ -d "external/imagedecoder-houri/library/.cxx" ]; then
+            if grep -rq 'meson ""' external/imagedecoder-houri/library/.cxx 2>/dev/null; then
+              echo "Detected stale empty meson arg, removing .cxx"
+              rm -rf external/imagedecoder-houri/library/.cxx
+            fi
+            if grep -rq 'cross-file=$' external/imagedecoder-houri/library/.cxx 2>/dev/null; then
+              echo "Empty cross-file detected, cleaning .cxx"
+              rm -rf external/imagedecoder-houri/library/.cxx
+            fi
+          fi
+
+      - name: Cache native build (.cxx only, exact match)
+        uses: actions/cache@v4
+        with:
+          path: external/imagedecoder-houri/library/.cxx
+          key: ${{ runner.os }}-native-${{ hashFiles('external/imagedecoder-houri/library/src/main/cpp/**', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-native-
+
+      - name: Set up gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+          cache-cleanup: on-success
+          addJobSummary: onFailure
+
+      - name: Check code format
+        run: ./gradlew spotlessCheck
+
+
+      # Split flavors into sequential steps: with --parallel a single invocation can
+      # overlap both flavors' R8 minify tasks (preview initWith release, shrink on),
+      # doubling peak heap and OOMing the runner. Sequential steps peak at one R8.
+      - name: Build app (mtl)
+        run: ./gradlew assembleMtlPreview -Pinclude-telemetry -Penable-updater --build-cache --max-workers=4
+        env:
+          CCACHE_DIR: /home/runner/.ccache
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          JAVA_TOOL_OPTIONS: -Xmx4g
+
+      - name: Build app (nomtl)
+        run: ./gradlew assembleNomtlPreview -Pinclude-telemetry -Penable-updater --build-cache --max-workers=4
+        env:
+          CCACHE_DIR: /home/runner/.ccache
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          JAVA_TOOL_OPTIONS: -Xmx4g
+
+      - name: Run unit tests
+        id: unit_tests
+        run: ./gradlew testDebugUnitTest --build-cache --parallel
+
+      - name: Upload test report
+        if: steps.unit_tests.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-report-${{ github.sha }}
+          path: app/build/reports/tests/testDebugUnitTest
+
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@f30bdd30588842ac76044ecdbd4b6d0e3e813478
+        with:
+          releaseDirectory: app/build/outputs/apk/mtl/preview
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: '35.0.1'
+
+      - name: Sign nomtl APK
+        uses: r0adkll/sign-android-release@f30bdd30588842ac76044ecdbd4b6d0e3e813478
+        with:
+          releaseDirectory: app/build/outputs/apk/nomtl/preview
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: '35.0.1'
+
+      - name: Rename apk
+        id: current_commit
+        run: |
+          set -e
+          version_tag=$(echo ${GITHUB_REF/refs\/heads\//} | sed -r 's/^refs\/(heads|tags)\///' | sed -r 's/[-\/]+/_/g')
+          commit_count=$(git rev-list --count HEAD)
+          echo "VERSION_TAG=$version_tag"
+          echo "VERSION_TAG=$version_tag" >> $GITHUB_OUTPUT
+          echo "COMMIT_COUNT=$commit_count"
+          echo "COMMIT_COUNT=$commit_count" >> $GITHUB_OUTPUT
+          mv app/build/outputs/apk/mtl/preview/app-mtl-arm64-v8a-preview-signed.apk Houri-$version_tag-r$commit_count.apk
+          mv app/build/outputs/apk/nomtl/preview/app-nomtl-arm64-v8a-preview-signed.apk Houri-nomtl-$version_tag-r$commit_count.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Houri-${{ steps.current_commit.outputs.VERSION_TAG }}-r${{ steps.current_commit.outputs.COMMIT_COUNT }}.apk
+          path: ./*.apk
+
+      - name: Upload mapping
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mapping-${{ github.sha }}
+          path: app/build/outputs/mapping/mtl/preview

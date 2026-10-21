@@ -1,0 +1,46 @@
+package eu.kanade.presentation.manga
+
+enum class DownloadAction {
+    NEXT_1_CHAPTER,
+    NEXT_5_CHAPTERS,
+    NEXT_10_CHAPTERS,
+    NEXT_25_CHAPTERS,
+    UNREAD_CHAPTERS,
+    BOOKMARKED_CHAPTERS,
+}
+
+enum class EditCoverAction {
+    EDIT,
+    DELETE,
+}
+
+enum class MangaScreenItem {
+    INFO_BOX,
+    ACTION_ROW,
+    // KMK -->
+    TRANSLATE_TOGGLE,
+    TRANSLATE_MANGA_INFO_TOGGLE,
+    UPSCALE_TOGGLE,
+    // KMK <--
+
+    // SY -->
+    METADATA_INFO,
+
+    // SY <--
+    DESCRIPTION_WITH_TAG,
+
+    // SY -->
+    INFO_BUTTONS,
+    CHAPTER_PREVIEW_LOADING,
+    CHAPTER_PREVIEW_ROW,
+    CHAPTER_PREVIEW_MORE,
+
+    // SY <--
+    CHAPTER_HEADER,
+    CHAPTER,
+
+    // KMK -->
+    RELATED_MANGAS,
+    SEQUEL_PREQUEL,
+    // KMK <--
+}

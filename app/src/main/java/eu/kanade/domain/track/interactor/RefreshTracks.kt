@@ -1,0 +1,135 @@
+package eu.kanade.domain.track.interactor
+
+import dev.zacsweers.metro.Inject
+import eu.kanade.domain.track.model.toDbTrack
+import eu.kanade.domain.track.model.toDomainTrack
+import eu.kanade.tachiyomi.data.track.EnhancedTracker
+import eu.kanade.tachiyomi.data.track.TrackStatus
+import eu.kanade.tachiyomi.data.track.Tracker
+import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.supervisorScope
+import mihon.app.di.globalAppGraph
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.domain.category.interactor.SyncCategoriesWithTrackStatus
+import tachiyomi.domain.track.interactor.GetTracks
+import tachiyomi.domain.track.interactor.InsertTrack
+import tachiyomi.domain.track.model.Track
+import tachiyomi.i18n.kmk.KMR
+
+@Inject
+class RefreshTracks(
+    private val getTracks: GetTracks,
+    private val trackerManager: TrackerManager,
+    private val insertTrack: InsertTrack,
+    private val syncChapterProgressWithTrack: SyncChapterProgressWithTrack,
+    // KMK -->
+    private val syncCategoriesWithTrackStatus: SyncCategoriesWithTrackStatus,
+    // KMK <--
+) {
+
+    // KMK -->
+    /**
+     * Moves the manga between any categories bound to a tracker status, but only when the status
+     * actually moved. Without that check every routine refresh would re-assert the last status and
+     * quietly undo category changes the user made by hand since.
+     */
+    private suspend fun syncCategories(previous: Track, updated: Track) {
+        if (previous.status == updated.status) return
+        val status = TrackStatus.parseTrackerStatus(trackerManager, updated.trackerId, updated.status)
+        syncCategoriesWithTrackStatus.await(updated.mangaId, status?.int)
+    }
+    // KMK <--
+
+    /**
+     * Fetches updated tracking data for every stored track from all logged-in trackers,
+     * applying the same two-way chapter-progress sync [await] uses for non-enhanced
+     * services. Tracks are refreshed sequentially per service (polite to API rate limits)
+     * with different services running in parallel.
+     *
+     * @return Failed updates.
+     */
+    suspend fun awaitAllTracks(): List<Pair<Tracker?, Throwable>> {
+        val allTracks = getTracks.await()
+        if (allTracks.isEmpty()) return emptyList()
+
+        return supervisorScope {
+            trackerManager.trackers
+                .filter { it.isLoggedIn }
+                .map { service ->
+                    async {
+                        allTracks
+                            .filter { it.trackerId == service.id }
+                            .mapNotNull { track ->
+                                try {
+                                    val updatedTrack = service.refresh(track.toDbTrack()).toDomainTrack()
+                                        ?: return@mapNotNull service to IllegalStateException("Failed to convert track data")
+                                    insertTrack.await(updatedTrack)
+                                    syncCategories(track, updatedTrack)
+                                    syncChapterProgressWithTrack.sync(track.mangaId, updatedTrack, service)
+                                    null
+                                } catch (e: Throwable) {
+                                    service to e
+                                }
+                            }
+                    }
+                }
+                .awaitAll()
+                .flatten()
+        }
+    }
+
+    /**
+     * Fetches updated tracking data from all logged in trackers.
+     * Also sync chapter progress with the [EnhancedTracker] or all trackers based on [enhancedTrackersOnly].
+     *
+     * @return Failed updates.
+     */
+    suspend fun await(
+        mangaId: Long,
+        // KMK -->
+        enhancedTrackersOnly: Boolean = true,
+        // KMK <--
+    ): List<Pair<Tracker?, Throwable>> {
+        return supervisorScope {
+            return@supervisorScope getTracks.await(mangaId)
+                .map { it to trackerManager.get(it.trackerId) }
+                .filter { (_, service) -> service?.isLoggedIn == true }
+                .map { (track, service) ->
+                    async {
+                        return@async try {
+                            val updatedTrack = service!!.refresh(track.toDbTrack()).toDomainTrack()
+                                ?: return@async service to IllegalStateException("Failed to convert track data")
+                            insertTrack.await(updatedTrack)
+                            // KMK -->
+                            syncCategories(track, updatedTrack)
+                            // KMK <--
+                            // KMK -->
+                            if (!enhancedTrackersOnly) {
+                                syncChapterProgressWithTrack.sync(mangaId, updatedTrack, service)
+                            } else {
+                                // KMK <--
+                                syncChapterProgressWithTrack.await(mangaId, updatedTrack, service)
+                            }
+                                // KMK -->
+                                ?.let {
+                                    val context = globalAppGraph.context
+                                    withUIContext {
+                                        context.toast(context.stringResource(KMR.strings.sync_progress_from_trackers_up_to_chapter, it))
+                                    }
+                                }
+                            // KMK <--
+                            null
+                        } catch (e: Throwable) {
+                            service to e
+                        }
+                    }
+                }
+                .awaitAll()
+                .filterNotNull()
+        }
+    }
+}

@@ -1,0 +1,586 @@
+# Houri TODO
+
+## Feature Ideas
+
+- [x] **Yokai Backport**: Library sort option to ignore articles (A, An, The, etc.) — like J2K/Yokai. Example: "A Sign of Affection" sorts under S, "The Apothecary Diaries" sorts under A instead of T.
+- [x] **Tracker**: MangaBaka (Mihon backport)
+- [x] **Tracker**: Anime-Planet (scraping method, no api)
+  - [x] Implement cookie scanning and storage for "ap" and "REMEMBER ME" (both are login auth cookies)
+  - [x] Implement cookie caching for all cf_* cookies
+  - [x] Cache "xf_user" and "xf_session" cookies
+- [x] **Tracker**: ComicK
+- [x] **Tracker**: Hikka (Mihon backport)
+- [x] **Mihon Backport**: Reader
+- [x] **Mihon Backport**: Decoder (experimental)
+- [x] **Mihon Backport**: Updater
+- [x] **New**: Toggle to enable an anime girl moaning whenever a chapter is completed. Moans should be randomized and have different probabilities of appearing (gacha mechanic) — 60/30/10 common/rare/legendary with synthesized wav assets
+- [x] **E-Hentai**: Add content censorship status as a tag next to the content type tag (doujinshi, manga, etc). Content defaults to censored (no title marking), decensored (marked as [Decensored] in the title), or uncensored (marked as [Uncensored] in the title).
+    - [x] Add accompanying sort/filter options for this change
+- [x] **E-Hentai**: Censorship type identification from manga tags (mosaic, full, etc) — distinct mosaic/full statuses with dedicated colors/filter/sort
+- [x] **New**: Add mango easter egg (?)
+- [x] **New**: Library subcategories — parentId hierarchy with DB migration 48, folder UI with badges/indentation, "All" virtual view via category tree query, backup/restore support
+  - Allows you to sort content even further inside a category, e.g. a category called "Manhua" could have a subcategory called "Favorites" or even a tag name like "Shounen" to allow for finer library customization.
+  - User can create subcategories freely and assign media to them easily.
+    - This requires modifying how manga is added to the library visually to accommodate assigning it to a subcategory
+  - Subcategories follow all library filter rules
+  - Should include default subcategory "All", which displays content from all subcategories in that category
+  - Should function visually and functionally to Android home screen folders
+- [x] **Improvement**: Heavily improve the "Feed" feature
+- [x] **New**: Webhook integration for app events similar to the Discord RPC, but for Discord webhooks and other webhook formats.
+  - Events: chapter started, chapter finished (with optional per-chapter reading time), new manga started, manga finished, library update finished, backup created
+  - Formats: Discord webhook embeds + generic flat JSON endpoint
+  - Settings under Connections > Webhooks, with test notification button
+- [x] **Expansion**: Allow users to upload their own sound packs for the "chapter completion moan" feature
+- [x] **New**: Achievements for various things throughout the app. Can the user collect them all?
+  - Include statistics in db file so users can re-import their progress
+  - Button with double confirmation allowing data wipe in case user wants to start fresh
+  - Rank tier system based on number of achievements unlocked
+    - Allows users to "flex" on others of lower rank
+    - Ranks should be overall statistics + # of achievements, e.g. 500 read chapters and 10 achievements etc
+      - Chapter statistics should exclude the "mark as read" feature and only track organically read chapters
+  - Implemented 2026-09-09: `tachiyomi.domain.achievement` (`Achievement` 25 entries, `AchievementTier`/`Category`, `AchievementStats` with Legend/Master/Veteran/Explorer/Apprentice/Novice ranks, `AchievementPreferences` organic/mangaFinished/library counts + timestamps, `AchievementManager` unlock thresholds, organic-only increment via `ReaderViewModel` (manually=false path), double-confirm wipe, backup via `PreferenceBackupCreator` re-import)
+- [x] **Subcategories**: Subcategory reordering
+- [x] **Discord RPC**: Majorly improve the Discord RPC feature and what information it shows
+  - Subcategory exclusion also needs to be properly wired into it
+- [x] **Subcategories**: Add option to use separate layout that closely mirrors Android's home screen
+  - Subcategories inside a category should show up as "folders" with the content inside.
+  - Any content not in a subcategory is mixed in alongside the subcategory folders
+  - Disabled by default
+- [x] **Webhook Connection**: Add cover of current series to webhook event embeds where applicable (all manga-related events)
+- [x] **Subcategories**: Option to update only the subcategory or the entire category (default behavior) when refreshing the library
+- [x] **Updater**: Add download progress bar
+- [x] **Database**: Harden database against corruption and wipes
+  - Startup integrity check with automatic restore from rolling local backups, corrupt-file quarantine, synchronous=FULL durability
+  - Supports SQLCipher-encrypted databases
+- [x] **Library**: Staggered library grid
+- [x] **Library**: Allow user to crop image when setting a custom cover
+  - This should apply to covers from pages and from custom images
+- [x] **Subcategories**: Option to hide the default "All" subcategory
+- [x] **Subcategories**: Hide the "All" subcategory when a category has no subcategories
+- [x] **New**: Smart Scanlator Preference & Chapter Deduplication
+- [x] **New**: Manga rereading support
+  - Would need tracker wiring
+  - Would require core manga handling changes
+  - DB exports to other forks wouldn't include reread count, may be handled dangerously
+  - Area of impact is unknown, could be deeply entrenched in the core of the app and cause bugs
+- [x] **Smart Scanlator Filter**: Improve with new features such as chapter count, ranges, and enable/disable specific scanlators
+- [x] **Reader**: Properly invert progress bar and page counter between RTL and LTR reading modes
+- [x] **Smart Scanlator Filter**: Make toggleable with an option in Advanced settings (defaults to disabled)
+- [x] **Smart Scanlator Filter**: Show what chapters a scanlator covers
+- [x] **Smart Scanlator Filter**: Add shortcut to toggle on/off via 3 dots menu in manga details
+- [x] **Chapter End Anime Girl Moan**: Add toggle in settings to randomize the moan location to be 50/50 where it's either between the chapters or on the last page (current)
+- [x] **New**: Censor lewd mangas toggle
+  - Useful for support purposes.
+  - Blurs the manga thumbnail and redacts the name, tags, and description.
+  - Works in manga details and the library catalogue
+- [x] **New**: Source-level manga filtering
+  - Ability to set filters as default on a per-sort basis too
+- [x] **New**: AI-powered translation / English grammar and vocab fixer — *Feasibility: investigated 2026-08-26, feasible via hybrid Yakuyomi-engine*
+  - Disabled by default, gated by `isIncognito` / `censorLewdManga` before upload; cached `WEBP` per `pageHash+targetLang+model`
+  - Hybrid pipeline: on-device `NCNN` detection + `ONNX int8` OCR (48px CTC) + `AOT-GAN` removal (tile 768) + `Canvas` typesetting → baked `Image` replacement for `WebGPU`/`Pager` (handles dual-page height-match, no overlay drift)
+  - Translation via cloud LLM (`Gemini`/`OpenRouter`, user `API_KEY`, `gemma-2-9b-it:free` default) with `ML Kit` offline fallback; `JA/KO/ZH → any` + `EN→EN` grammar/vocab fix via same prompt (`fix grammar, preserve names, output only EN`)
+  - Typesetting: pixel-perfect wrapping, `kinsoku`, tilt-aware quad angle, adaptive font size, `Noto CJK` OFL fonts, luminance-based color + outline
+  - Integration: `:yakuyomi-engine` module (`+55MB` via `arm64` ABI split, CPU-only `1.2s` SD8G2 / `2.8s` SD720G, hidden under LLM wait), `TranslationManager` (`AppGraph` Metro) hooked in `ChapterLoader` → `ViewerReaderPage.imagePage`, `WorkManager` for auto-translate on download
+  - Effort `~6.5d` (`+3d` for typesetting), reference `mannu691/TachiyomiAT` + `joyeli/yakuyomi-engine` + `manga-image-translator`
+  - Reference Code: [TachiyomiAT](https://github.com/mannu691/TachiyomiAT), [yakuyomi-engine](https://github.com/joyeli/yakuyomi-engine)
+- [x] **New**: Per-category and per-subcategory reader settings
+  - Subcategories inherit parent category settings by default unless changed
+  - Needs category priority system for multi-category mangas
+  - Implemented 2026-09-09: `CategoryReaderPreferences` (per-category + per-subcategory `readerForCategory`/`readerForSubcategory`, inherit parent, priority uses first matching category in manga's categoryIds)
+- [ ] **New**: Light novel support — *Feasibility: investigated 2026-08-27, feasible via new NovelViewer + LN SourceIds, reuses 70% of library/tracker stack*
+  - Gated by `isLightNovelEnabled` (default `false`, like `isHentaiEnabled`); per-language sourceIds `LN_SOURCE_IDS` (18 locales, `LEWD_SOURCE_SERIES+100` range) mirroring `EHENTAI_EXT_SOURCES`/`EXHENTAI_EXT_SOURCES` in `SourceIds.kt`; helpers `Manga.isLightNovel()` / `Source.isLnBasedSource()` in `DomainSourceHelpers.kt`, `mangas.is_light_novel` column + migration 47
+  - Domain reuse: `Manga`/`Chapter` same tables (`source` distinguishes), `NetworkToLocalManga`, `LibraryUpdateJob`, `Feed`, `TrackerManager` (AniList `type: NOVEL`/MAL `novel`) work free; persist browse `RaisedSearchMetadata` via `MangaMetadataRepository.insertMetadata` like EH fix 7ed6a92b6
+  - Extensions: `NovelSource`/`TextPageSource` alongside `HttpSource.getPageList` or `Page(isText)` flag; delegated LN template (`NovelUpdates`/`Syosetu`/`Kakuyomu`) via `EnhancedHttpSource`/`DelegatedHttpSource` + `jsoup` HTML→clean text; ID range `LEWD_SOURCE_SERIES+100` for community
+  - Reader: new `NovelViewer` implementing `Viewer` (parallel to `WebGpuViewer`/`Pager`), Compose `HorizontalPager` + `TextLayoutResult` pagination, reuse `WebGpuConfig`/`ReaderPreferences` shims (dual-page/cutout/navigation/progress), `TextPageCache` (5 MB LRU), `TTSPref`/`fontScale`/`lineHeight`, EPUB import via `core:archive` (`epublib`), `ReaderActivity` switches `isLightNovel() ? NovelViewer : WebGpuViewer`, reuses `ChapterPreloadGuard` (`preloadAhead=3`)
+  - Pipeline: `:reader-text` module (`~2 MB`, no native deps), `NovelConfig` Metro `AppGraph`, `ChapterLoader` → `ViewerReaderPage` replacement; `DownloadManager` text-file path
+  - Effort `~4.4d` (`+2d` EPUB/TTS/justify polish), reference `LNReader/lnreader` + `TachiyomiAT` delegated-source pattern
+  - LLM should leave "breadcrumb" note files for each chapter it translates detailing important chapter info and a summary.
+    - These notes are then kept in a sliding window for future chapter translation consistency as context for the LLM
+    - This avoids having the user need to download all chapters at once and can instead flow naturally in reading order
+  - Biggest issue with this approach is the amount of API calls it would use. Free models would need to be investigated.
+- [x] **New**: WebAssembly computation engine for extensions — *Feasibility: investigated 2026-08-27, feasible via J2V8 + WebAssembly, not bare wasmtime; for website wasm bundles (keygen/auth)*
+  - Implemented 2026-09-09: `WasmEngine` (`AppScope` `Inject`, J2V8 V8 detection, LRU 24-entry module cache `sha256(wasmUrl+jsUrl)`, `fetchBytes`/`fetchText` via `OkHttpClient` with CF, `computeWebsiteWasm` with 16MB/5s caps, `executeViaJ2V8` reflect invocation + fallback, `computeStandaloneWasm`, `cacheSize`)
+  - Goal is **website `*.wasm` bundles** (key generation, auth, `decrypt` as manga sites use Emscripten/`wasm-bindgen` with `env.memory`/`env.table`/`js.*` imports + `*.js` glue), not `STANDALONE_WASM` — bare `wasmtime`/`wasm3`/`WAMR` only provide `wasi_snapshot_preview1` and trap on `env.__memory_base`/`js.crypto_getRandomValues`
+  - Current `JavaScriptEngine` is `app.cash.quickjs:quickjs` which **has no `WebAssembly` global** → `WebAssembly.instantiate` throws; `V8`/`WebView` does (`WebAssembly.Memory/Table`)
+  - Host `:wasm-engine` (`~3.5 MB` `J2V8` `com.eclipsesource.j2v8` arm64 split, `+0.6 MB` `wasm3` optional for pure extension `STANDALONE_WASM`); `Metro @SingleIn(AppScope::class) @Inject class WasmEngine @Inject constructor(context: Context, client: OkHttpClient)` with LRU compiled `Module` cache (key `sha256(wasmUrl+jsUrl)`)
+  - Extension ABI (opt-in, backwards compatible): `abstract class HttpSource { open fun getWasmUrl(): String? = null; open fun getWasmJsUrl(): String? = null; open suspend fun computeWebsiteWasm(input: String): String? }` host does `GET wasmUrl` + `GET jsGlueUrl` → `J2V8.executeVoidScript(jsGlue)` → `WebAssembly.compile/new Uint8Array(wasmBytes) + instantiate(importObject)` via site’s own glue, then `export(arg)` → `ByteArray/String`
+  - Flow: extension `getPageList`/`getImageUrl` calls `computeWebsiteWasm(url)` → host `NetworkHelper` `CloudflareInterceptor` `GET` with `cf` cookies → `J2V8` `WebAssembly` → return key/token → reuse `NetworkToLocalManga` / `ChapterLoader` as normal; fallback to `wasmtime`/`wasm3` for bundled `STANDALONE_WASM` (`func descramble(i32,i32)->i32` no imports)
+  - Integration: no DB migration, no `SourceId` change; `AppGraph` `WasmEngine`, `DomainModule` no change; `wasmtime` dismissed for website case (would need per-site `env` shim reverse-engineering, brittle on deploy)
+  - Effort `~2.5d` (`0.5d` engine + `0.5d` Source ABI + `1d` sandbox/fuel `16 MB`/memory caps like `WebGpuViewer.rescale` + `0.5d` extension template `MangaBaka auth.wasm`); reference `bytecodealliance/wasmtime`, `wasm3/wasm3`, `WAMR`, `J2V8`
+  - Keep QuickJS for legacy `eval`; add J2V8 only for `WebAssembly` — WebView reuse already pulls Chromium V8 for `CloudflareInterceptor` but per-chapter `WebView` `~400 ms` + `30s` timeout is janky vs `J2V8` `2-8 ms` per keygen
+- [x] **MTL Engine**: Translation manga font (default) + translation font preference
+- [x] **MTL Engine**: More meaningful user-facing failure messages (tell the user why the translation failed)
+- [x] **Smart Release Predictor**: Improve algorithm
+- [x] **Subcategories**: Make subcategory chips collapsable
+  - This should likely be done by hold tapping on the default "All" button which collapses the row and turns into a plus button
+- [x] **MTL Engine**: Translate manga info (title, description, etc)
+- [x] **DB Per-Manga Reading Time**: Expand feature with details from upstream [PR](https://github.com/mihonapp/mihon/pull/2728)
+- [x] **WebGPU Reader**: Port latest upstream [PR](https://github.com/mihonapp/mihon/pull/3886) changes if not already implemented
+- [x] **Manga Details**: Improve "fill metadata from tracker" functionality
+  - Added getMangaMetadata to MangaBaka + ComicK; the tracker picker no longer excludes enhanced trackers
+  - Needs mangabaka support
+  - Expand metadata scope to include tags and publication status
+  - Allow per-category default tracker to use as an info source
+- [x] **Smart Scanlator Filter**: Add toggle in options (defaults to show) to show/hide the manga details component
+  - Added LibraryPreferences.showSmartScanlatorInDetails (default true) + Advanced toggle, toolbar respects it
+- [x] **New**: Optional on-device AI upscaling for manga reader (Real-CUGAN / Real-ESRGAN / Waifu2x) — improve low-resolution/heavily compressed pages offline
+  - References: AniZen (https://github.com/salmanbappi/AniZen) — real-time Anime4K shaders with adaptive quality scaling and Vulkan/NPU hardware fallback (video → adapt for static manga: background/on-demand pre-processing)
+  - mihon_img_upscale (https://github.com/HaoweiLi97/mihon_img_upscale) — Mihon PoC supporting multiple models (Real-CUGAN, Real-ESRGAN, Waifu2x) and backends (Vulkan, Qualcomm NPU)
+  - komikku_img_upscale (https://github.com/Viel0320/komikku_img_upscale) — empty, possibly abandoned attempt for Komikku ecosystem
+  - Proposed integration for Houri: per-series or global toggle for "AI Upscaling" in reader settings; bundled inference engine (NCNN / ONNX Runtime) with Vulkan/NPU acceleration where available; quality presets Fast/Balanced/High like AniZen's Anime4K levels; cache upscaled pages to avoid repeated processing
+  - Implemented 2026-09-09: `UpscalePreferences` (enabled/preset FAST/BALANCED/HIGH, backend AUTO/VULKAN/NPU/CPU, model REAL_CUGAN/ESRGAN/WAIFU2X, per-series `isEnabledForManga`, factor 1-4, **MTL-gated** via `TranslationPreferences.enabled()` + `BuildConfig.IS_NOMTL`) + `UpscaleEngine` (Vulkan/NPU auto-detect, ncnn/onnxruntime backend probe, 200MB LRU webp cache, scale with preset-aware factor, 16MP guard, MTL-gated early-return, background/on-demand hook)
+- [x] **Trackers**: Allow "fill metadata from tracker" to manage tags and publication status
+  - Expanded `TrackMangaMetadata` with `tags` + `status`; AniList now returns genres/tags + publication status; `EditMangaDialog.autofillFromTracker` merges tags and sets status spinner
+- [x] **Trackers**: Ability to set a tracker as a definitive metadata source
+  - This functionality should be able to be applied to individual manga or entire categories
+  - Implemented 2026-09-09: `TrackPreferences.preferredTrackerForManga/Category` (semicolon map, get/set, per-manga and per-category resolution)
+- [x] **Onboarding**: Enable/disable achievements system on first load
+  - Helps users who don't want it enabled to easily disable it before use
+  - Current users should either re-onboard or toggle it in settings
+  - Implemented 2026-09-09: `AchievementsStep` (Theme→Storage→**Achievements**→Permission→Guides) with three switches (system/toasts/sounds) bound to `AchievementPreferences`; re-onboard via Settings → Advanced → Onboarding guide, or toggle in Settings → Advanced → Achievements
+- [x] **Achievements**: Add negative achievements that don't count towards the total unlocks and don't give any rank points
+  - Implemented 2026-09-10: `Achievement.isNegative` + `countsTowardsProgress`, 7 negatives (binge guilt, abandoned, burnout, spoiled, hoarder shame, rage quit, DND), excluded from rank/stats via `AchievementPreferences.computeStats` countable filter, grayed + "Negative • No rank points" badge in `AchievementsContent`
+- [x] **Achievements**: Add backlog-related achievements
+  - Implemented 2026-09-10: backlog thresholds 10/25/50/100/250 via `AchievementManager.onBacklogChanged` + cleared counters 10/100 via `onBacklogCleared`, `TrackPreferences` backlog calc `libraryCount-finishedCount`
+- [x] **Achievements**: Add LTR achievement to match parity with RTL achievement
+  - Implemented 2026-09-10: `ltr_reader` BRONZE (parallels `rtl_reader`), `AchievementPreferences.ltrMangaFinishedCount`, `AchievementManager.onLtrFinished()` wired in `ReaderViewModel` LTR orientation check
+- [x] **Achievements**: Add achievements for reading time
+  - Implemented 2026-09-10: 6 reading-time achievements 1h/10h/50h/100h/500h/1000h + ultimate 2000h, `totalReadingTimeMinutes` pref, `onReadingTimeMinutes` in `ReaderViewModel.updateHistory` (ms→min)
+- [x] **Achievements**: Add daily/weekly rotating achievement pool
+  - Implemented 2026-09-10: 50 rotating achievements (`rotating_daily_*` 3 picks/day, `rotating_weekly_*` 4 picks/week), `RotatingAchievementPool` LRU epoch rotation (daily=days, weekly=days/7), unlocked-aware filtering (prefers not-yet-unlocked), `rotatingProgress` mapping + `markProgress`/`getProgress`, handled via `achievements.isRotating` + `AchievementCategory.ROTATING`
+- [x] **Achievements**: Add new tier: ultimate
+  - Implemented 2026-09-10: `AchievementTier.ULTIMATE` (7th tier), 5 ultimate achievements (ink god 20k chapters, eternal library 2k manga, time dilation 2k h, absolute perfection 200 countable, ultimate hunter 20 secrets), `AchievementStats` rank "Ultimate" + `rankTier=ULTIMATE`, `AchievementSoundPlayer.ultimateWav` shimmer chime, duration 1200ms
+- [x] **Achievements**: Cool animated text colors/gradients for unlocked high tier achievements (toggleable, defaults to enabled
+  - Implemented 2026-09-10: `AchievementTierAnimation` modular framework — `brushForTier` linear/sweep gradients per tier (silver→ultimate), `rememberTierProgress` infinite transition (perf-friendly, only for unlocked high tiers), `Modifier.tierAnimatedBackground`, `AchievementsContent` header toggle `animationsEnabled` (default true) + per-card `animatedModifier`, negative/secret excluded
+- [x] **Achievements**: Progress tracker per-achievement
+  - Implemented 2026-09-10: `AchievementProgress` (threshold map + `progressFor`/`labelFor`/`hasProgress`, `currentFor` per prefs) + `LinearProgressIndicator` + `X/Y` label in both `AchievementsContent` + `SettingsAchievementsScreen` (shows `2/10` etc, hidden when unlocked or no threshold)
+- [x] **Achievements**: Add achievements for "catching up" with manga
+  - Implemented 2026-09-10: already had 5 `*_caught_up` achievements (1/5/10/20/50) + `prefs.mangaCaughtUpCount` + `manager.onMangaCaughtUp` + `ReaderViewModel` permanent-status branch (`onMangaCaughtUp` for ongoing, `onMangaFinished` for completed) + progress tracker wiring via `AchievementProgress`
+- [x] **Debug**: Add button to clear logs to the debug menu
+  - Fixed 2026-09-11: `DebugFunctions.clearLogs()` (deletes `*log*.txt/.log` in `cacheDir` + `logcat -c`) auto-appears in DEBUG MENU
+- [x] **Debug**: Add more information to crash reports
+  - Fixed 2026-09-11: `CrashLogUtil.getDebugInfo()` now includes RAM (`avail/total/low/threshold`), storage (`free/total`), battery (`%`), locale/timezone, orientation, PID/thread
+- [x] **Webhook**: Wire achievement system into webhook connection
+  - Fixed 2026-09-11: `WebhookEvent.ACHIEVEMENT_UNLOCKED` + `WebhookPreferences.notifyOnAchievementUnlocked()` + `AchievementManager` webhook dispatch on `notifyIfNeeded` with `achievement_id/title/tier`
+- [x] **WebGPU Reader**: Add page offset (mirrors legacy reader page offset feature)
+  - Fixed 2026-09-11: `ReaderPreferences.webgpuPageOffset` (-50..50, default 0, KMK) + `WebGpuConfig.pageOffset` + `WebGpuViewer.applyPageOffset()` (translationX = width*offset/100*0.5, layout listener + flow collect) + `ReadingModePage` slider + KMR strings `pref_webgpu_page_offset`
+- [x] **AI Upscaler**: Add simple upscaling algorithms that nomtl builds can use, such as bicubic and more.
+  - Fixed 2026-09-11: `UpscalePreferences.SimpleAlgo` (BICUBIC/BILINEAR/NEAREST) + `Mode` NATIVE/SIMPLE + `isSimpleMode()` + `UpscaleEngine` simple path via `UpscaleScalingStrategy.upscaleBitmapWithAlgo` (filter true/false, bicubic approximated via bilinear); `SettingsUpscalerScreen` mode toggle + simple algo picker visible to both MTL and no-MTL builds (no-MTL defaults to SIMPLE, MTL can switch to SIMPLE for lightweight bicubic without native ncnn/onnx)
+- [x] **MTL**: Option to use remote URLs for inpainting and OCR models
+  - Implemented 2026-09-11: `TranslationPreferences.modelManifestUrl/customOcrModelUrl/customInpainterModelUrl/customDetectorModelUrl` (https-only, 2048 char, sanitized) + `ModelManager.applyCustomModelUrls()` overrides fallback/manifest entries per role + `customUrlsActive()` + `SettingsYakuyomiScreen.getRemoteModelGroup()` (manifest + 3 per-model EditText + Re-download button) — works on both mtl and nomtl via `i18n-kmk` strings
+- [x] **MTL**: Option to use entire MTL services such as [mangatranslator](https://mangatranslator.ai/)
+  - Implemented 2026-09-11 via JS reverse-engineering of Chrome extension `lepcfgkehgeiblekejomdmdklmjdmflp` (ichigo.moe `/translate` with `base64Images`/`targetLangCode`/`fingerprint`/`clientUuid`/`translationModel`, `Client-Version: 1.0.1`, Bearer auth, 429/401 handling, fingerprint via djb2 + canvas/hardware/screen hash): `MangaTranslatorService` (OkHttp, `ichigo.moe` default, `clientUuid`/`fingerprint` persisted in `TranslationPreferences`, per-manga permanent `TranslatedPageStore` cache + `TranslationCache` 14d, 60s timeout) + `TranslationManager` remote branch (early-return before local pipeline, saves to both caches, breadcrumb) + `SettingsMangaTranslatorCacheScreen` (lists `filesDir/yakuyomi_saved/<mangaId>` even for removed manga, per-manga Wipe + Clear All) + nomtl off-device wiring (stub `MangaTranslatorService`/`TranslatedPageStore`/`TranslationCache`/`TranslateMangaStore` functional, `SettingsYakuyomiScreen` now visible on nomtl with off-device-only groups, `MangaScreen` toggles always visible)
+  - Fully supports authentication (Bearer token from `mangaTranslatorApiKey` → `effectiveApiKey` fallback, `access_cookie` sync equivalent) and chapters are cached permanently (`mangaTranslatorCachePermanent` pref, default true, `yakuyomi_saved` 256MB/40 chapters)
+  - User can wipe cached TLs per manga via Settings → Translation → MangaTranslator → Manage per-manga translation cache (works for removed library entries)
+- [x] **WebGPU Reader**: Port latest upstream [PR](https://github.com/mihonapp/mihon/pull/3933)
+  - Ported 2026-09-13 without native bumps: page-gap slider for continuous vertical (`continuousGap` pref + `pageGap` slot measuring in `webgpuviewer-houri` fork, long strip keeps 0), disable-zoom-out wiring (`zoomOutDisabled` → fork `homeScale`/`minScale` split, also ported to fork), dual-mode progress fix (`spreadPartner`/`progressPage` — rail follows spread's last page) + decode-worker/eviction hardening, mode-aware reader settings. Deferred: HDR/UltraHDR gainmap rendering (needs `image-decoder` 13 native `Gainmap`, not in `imagedecoder-houri`) and upstream `WebGpuRenderer` device-loss hardening (41-only `DeviceLostCallback` shape).
+- [x] **AniList**: Implement upstream [PR](https://github.com/mihonapp/mihon/pull/3942)
+  - Ported 2026-09-13: `AnilistApi` rate limiter `permits 85→25` per AniList docs (hard limit 30).
+- [x] **Manga Details**: Implement sequel/prequel widgets
+  - Should get metadata from user's preferred tracker
+  - Disabled by default, can be enabled in settings
+  - Should intelligently cache sequel/prequel metadata to avoid API abuse
+  - See [#6](https://github.com/PineappleTwilight/houri/issues/6)
+  - Implemented 2026-09-13: `MangaDexSequelPrequelProvider` (`exh/md/related/`, MangaDex relation API + cache), `RelatedMangasRow` widgets on `MangaScreen`, default OFF via `UiPreferences` + `SettingsBrowseScreen` toggle, preferred-tracker aware
+- [ ] **WebGPU Reader**: Image filter system
+  - Has presets of things like grayscale, sepia, and more
+  - Disabled by default
+  - Allows the user to modify values on their own and create/use their saved presets
+  - Extension of this system should be made for "immersive filters"
+    - These are essentially transparent animated gifs overlaid on top of the reader
+    - Allows more immersion, for example sakura petals falling when reading a manga
+    - Also has presets and custom user-uploaded gifs
+- [ ] **Library**: Per-category update scheduling intervals
+  - Each category gets its own library-update interval, instead of one global setting
+  - A manga's interval should resolve from its category, with the global setting as the fallback for uncategorised manga
+  - Subcategories should inherit from their parent unless given their own interval
+  - See [#25](https://github.com/PineappleTwilight/houri/issues/25)
+  - NOT STARTED as of 2026-09-30. Notes for whoever picks it up:
+    - The scheduling itself lives in `LibraryUpdateJob`; a wrong interval means manga silently stops updating, so this is the highest-risk item of the current batch
+    - Needs somewhere to store a per-category interval before the job logic can be touched
+    - Verify any SQL directly (build a schema in `sqlite3`, apply the migration, exercise the query) the way migrations 56 and 57 were checked — it catches things a read-through does not
+    - Consider what happens to a category that is deleted while holding an interval, and to a manga that moves between categories
+
+
+## Bugfixes
+- [x] Fix UI transition choppiness.
+- [x] Turn off "Recommendations" by default.
+- [x] Add caching to recommendations (db)
+- [x] Evaluate and bugfix all delegated sources (possibly removing some)
+- [x] Refresh manga details page when migrated (prevents having to exit the manga and view the details again for the changes to apply)
+- [x] Improve Discord connection feature
+- [x] Enable EH functionality by default.
+- [x] Refresh library on title clean
+  - Library should be re-initialized from disk to prevent the user from needing to restart the app to see the title changes
+  - Ensure compatibility with e/exhentai censorship detector
+- [x] Fix some extensions not registering
+- [x] Fix extension crashes related to R8 stripping
+- [x] Change about page's github URL to this fork repo
+- [x] Fix "invalid_redirect" error with MangaBaka oAuth
+- [x] Change AnimePlanet ID to something likely to be unique (ID 11 is hikka upstream)
+- [x] Change AnimePlanet login to webview system to avoid cloudflare issues
+- [x] Fix e/ex-hentai manga details page count overlaying on top of the content type chip instead of below the chips
+- [x] Change MangaBaka to ID 11 (Hikka is ID 10)
+- [x] Fix anime planet webview login - never gets session cookie once logged in
+- [x] Remove komikku logo from more app locations
+- [x] Remove all komikku references (filenames, WebDAV default, deep links, OAuth redirects)
+- [x] Fix database "export sensitive tokens" option not including exhentai auth cookies
+- [x] Fix e/exhentai censorship tags - censorship markers can appear at any order in the manga title, not just at the very end
+- [x] Fix clean titles not refreshing the library (requires app restart to load cleaned titles)
+- [x] Fix e/exhentai rare nullptr exceptions when browsing
+- [x] Change Suwayomi tracker back to ID 9 (parity with upstream)
+- [x] Change AnimePlanet and Comick trackers to use cookiejar storage instead of preference storage
+- [x] Fix webgpu renderer not respecting preference toggle (does not load even when enabled)
+- [x] Fix app crash when attempting to update through the new updater
+- [x] Fix AnimePlanet search showing "WebView cannot be initialized on this thread because it has no looper" error
+- [x] Fix rare AnimePlanet search crash
+- [x] Fix subcategories being handled as root categories
+- [x] Modify "add to library" dialogue to support subcategories
+- [x] Modify library viewer to support viewing subcategories
+- [x] Ensure Discord RPC handles subcategory filtering correctly
+- [x] Fix chapter completion reading moan not working
+  - [x] Improve chapter completion reading moan to make it dynamic so we can add more sounds in the future or custom sounds from the user
+- [x] Modify all category selection UIs to be subcategory-aware
+- [x] Add chapter completion moan option to global reader settings
+- [x] Remove herobrine — no code references found; treated as meme entry, verified clean
+- [x] **Subcategories**: Replace folder icon in the category editor with a hamburger dragger like the parent categories and remove the arrow buttons
+- [x] **Subcategories**: Fix db import bug where all imported categories are imported as subcategories under "Default"
+- [x] **Comick Tracker**: Fix cookies not saving and the tracker just generally not working
+- [x] **Reader**: Fix double-paged second pages being smaller than the first page
+- [x] **Reader**: Advanced setting to re-enable the legacy (unscaled) double-page bitmap merge
+  - The height-matching fix causes extremely small chapters on some ereaders, so it needs an escape hatch
+- [x] **Subcategories**: Standard subcategory view not showing chips on eReaders (affected device runs Android 14, Meebook M8 by Haoqing)
+- [x] **WebGPU Reader**: Fix "double-tap to zoom" toggle not doing anything
+- [x] **Subcategories**: Make folder view folders the same height as manga entries
+- [x] **Smart Scanlator Filter**: Add padding to the manga details text on the lefthand side
+- [x] **Subcategories**: Routine on startup to delete subcategories not associated with a category (orphaned)
+  - Handling for this should also be present when performing category operations, especially deletes
+- [x] **WebGPU Reader**: Fix tiny pages on ereaders when navigating to previous page or resuming from sleep
+- [x] **Manga Details**: Remember subcategory state when exiting manga details (take us back to the subcategory if we were in one, etc)
+- [x] **Library**: Find out why "clean titles" still does not hot-reload the library to show the new name despite 3 bugfixes
+  - Root cause: Manga equality ignored custom-info snapshots, so distinctUntilChanged swallowed the re-emission
+- [x] **Library**: Fix custom manga cover cropping loading infinitely
+- [x] **WebGPU Reader**: RTL/LTR UI adjustment from previous commit is not present
+- [x] **WebGPU Reader**: Fix double-page scaling fix only working occasionally
+- [x] **WebGPU Reader**: Fix freezing/choppiness between chapters
+- [x] **Library**: Fix editing manga details not taking effect
+- [x] **Webhook**: Fix reading time being reset when tabbed out of the app (should be paused)
+- [x] **WebGPU Reader**: Fix freeze on exiting and re-entering reading (viewer cleanup ran after GPU teardown)
+- [x] **Subcategories**: Force parent category marked when subcategory is set in library manga add/management
+- [x] **WebGPU Reader**: Fix double-page scaling fix not applying on first page rendered when entering the reader (changing pages fixes it, but whenever the user leaves the reader and re-enters, issue comes back for that first page)
+- [x] **WebGPU Reader**: Fix persistent and intermittent double page scaling issues — scale shorter→taller deterministically, guard zero heights, fallback to opposite side when bytes evicted; fixes first-spread no-op and e-ink tiny-shrink (see `WebGpuViewer.maybeScheduleSpreadHeightMatch`)
+- [x] **WebGPU Reader**: Fix wide pages getting cut off on the sides
+- [x] **E-Hentai**: Fix browse list showing every entry as having 2026 pages
+  - Manga details page does not have this bug for some reason
+- [x] **WebGPU Reader**: Fix double-page counter logic
+- [x] **All Readers**: Fix obscure double-page bug if identified and present (See PR: https://github.com/komikku-app/komikku/issues/1696)
+- [x] **App**: Disable feeds by default (opt-in preference)
+- [x] **MTL Engine**: Drastically harden the workflow pipeline and thoroughly investigate the UI wiring for bugs/improvements
+- [x] **MTL Engine**: Translate manga toggle does not show up on tablet UI mode.
+- [x] **MTL Engine**: Make translations not wrap in the middle of words. Only start a new line after a full word is at the end of the previous one (no hanging letters)
+- [x] **MTL Engine**: Fix downloaded chapter translation status not showing up until after translation is complete, in which it always says 0%.
+  - This should also be migrated to a progress icon with a similar style to the actual chapter download button
+- [x] **MTL Engine**: Wire into legacy reader
+- [x] **MTL Engine**: Improve handling of common user errors (forgot to download models, wrong model string, API key ratelimited, etc)
+- [x] **MTL Engine**: Improve wiring with both readers (states, communication, etc)
+- [x] **MTL Engine**: Reduce UI jank
+  - Model downloading progress bar needs padding on the sides
+  - Model selector should be a selection box instead of a string field
+    - Should be populated automatically via relevant get available model endpoints per provider
+  - More providers should be added (e.g. opencode Zen, nvidia NIM, etc)
+  - Validation for all appropriate fields
+- [x] **WebGPU Reader**: Fix next chapter preload causing current chapter to turn black until the next chapter has preloaded (reverts to loading screen while it is preloading, interrupting current chapter reading)
+- [x] **MTL Engine**: Make "clear chapter cache" button refresh the used cache to, presumably, 0 immediately after press
+  - Current behavior requires user to exit the settings menu and go back in
+- [x] **MTL Engine**: Fix redownload models button not doing anything and overall needing improving
+  - The entire model download and storage system should be improved/reworked/optimized
+  - Another button should also be added to clear the downloaded models instead of re-downloading
+- [x] **Manga Details Page**: Fix start button not appearing until exiting a manga and going back into it
+- [x] **App**: Fix "what's coming" page labeling every todo category as "drawing board"
+  - Verified: parseTodo correctly tracks `## ` section headers; reproduced a clean parse of the live GitHub raw file (Feature Ideas: 5, Bugfixes: 3, Drawing Board: 1) — likely a one-time fetch during a TODO.md edit
+- [x] **App**: Improve manga db statistics
+  - Reading time per manga should also be included
+- [x] **Subcategories**: Wire android backstack navigation to subcategories
+  - Should properly exit the subcategory instead of exiting the app
+- [x] **MTL Engine**: Fix output LTR text being constrained vertically (like a top-to-bottom language) instead of allowing the full bubble width to fill
+- [x] **Library**: Fix staggered grid entries swapping places when scrolling up (cover ratios now survive item eviction)
+- [x] **Manga Details**: Scanlator priority entry missing on tablet UI
+- [x] **MTL Engine**: On-the-fly chapter translation now runs strictly in page order (start → finish), keeping LLM breadcrumb context in reading order
+- [x] **MTL Engine**: Fix free-floating (on-art) Latin text typeset sideways instead of lengthways
+- [x] **MTL Engine**: Fix chapter download TL icon always showing an error (error badge only when a chapter fully fails) and background TL stalling (retry on any page error, reset stale states)
+- [x] **Local MTL Provider**: Hide irrelevant provider options when selected
+- [x] **Local MTL Provider**: Improve the UI and improve/harden/bugfix the backend engine.
+  - We should have buttons to start/stop the llamacpp engine that only work if we have a model able to load (duh)
+  - Toggle to start the llamacpp daemon on app startup
+  - Model downloading needs improvement
+  - Various UI jank needs improvement
+- [x] **Local MTL Provider**: Vision variants for local gemma models (mmproj via MultimodalBridge)
+- [x] **Local MTL Provider**: Per-model llama.cpp sampling settings (temp/top_p/top_k/repeat_penalty/max_tokens/context/threads) via an "Advanced (llama.cpp)" submenu, hidden without a selected model
+- [x] **Local MTL Provider**: GGUF import overhaul — background copy (no UI freeze), original filename preserved, duplicate detection (re-import just switches to the model), imported models listed in the picker
+- [x] **Local MTL Provider**: Fix model download stalling ~150 MB — throttled progress emissions, dedicated read-timeout client, HTTP Range resume, free-space pre-check, size verification
+- [x] **Library**: Fix tracking filters
+  - Added an overall "Tracked (any)" filter above the per-tracker rows (IS = tracked anywhere, NOT = untracked)
+- [x] **App**: Update komikku deeplinks to houri deeplinks
+  - Redirect URIs already houri://; normalized MangaBaka from mihon:// to houri://
+- [x] **MyAnimeList**: Update oauth client to use houri's oauth credentials and not komikkus
+  - Added houri://myanimelist-auth redirect + PKCE plain method + per-provider storage (client_id kept, redirect now houri)
+- [x] **Manga Details**: Fix blacklisted chapters still appearing in the chapter list
+  - Blacklist now filters unconditionally (was gated behind the smart-merge toggle)
+  - Also needs visual feedback when you blacklist a chapter
+- [x] **Smart Scanlator Filter**: Fix users "getting stuck in the deduplication menu"
+  - Explicit system-back handler guarantees exit from the scanlator preference screen
+- [x] **Smart Scanlator Filter**: Fix non-rounded decimals inside the blacklisted chapters panel
+  - Blacklist keys round to 2 decimals; the panel formats legacy entries via asChapterLabel
+  - Decimals should be rounded to the 10th place
+- [x] **Local MTL Engine**: Make various options update the other UI elements immediaely (clearing a model removes it from the list, sets loaded model to nothing, etc)
+  - Clearing now removes from list via importTick, resets selection, and clears per-model sampling; UI observes status flows immediately
+- [x] **Local MTL Engine**: Harden flaky model downloader - add retries for timeouts and improve time estimation
+  - Added 3-retry with backoff for timeouts/SocketTimeout, throttled 5/s emits, Range resume, free-space check, size verify, averaged ETA
+- [x] **Local MTL Engine**: Rework preferences to be more visually appealing to the user
+  - Condensed info spam: shortened Local LLM header, combined recommendation/runtime info, reduced subtitle verbosity
+- [x] **Local MTL Engine**: Add ability to load mmprojs for custom models + chat template adapters for custom models
+  - Custom GGUF now auto-detects companion .mmproj (same stem) for vision; backend handles absolute mmproj path; chat template via applyChatTemplate
+- [x] **Local MTL Engine**: Fix stopping the engine hard crashing the app
+  - Stop/clear now captures backend under lock then closes outside lock with runCatching, avoids deadlock and native shutdown on wrong thread
+- [x] **Local MTL Engine**: Drastically improve inference speed
+  - Reduced default maxTokens 1024→768, context 4096→3072, threads cores-2→all cores, gpuLayers -1 (auto), batch 512→1024 equivalent via sampling
+- [x] **Local MTL Engine**: Add visual feedback per-stage of the MTL process for the user
+  - Overlay now shows stage text (Detecting·OCR / Translating / Inpainting·Typesetting) under progress; TranslatingChip split into Column
+- [x] **MTL Engine**: Store API keys per-cloud-provider
+  - Added apiKeyForProvider / modelForProvider per-provider keys, effectiveApiKey/effectiveModel with migration, UI now edits per-provider
+- [x] **MTL Engine**: Store models per-cloud-provider
+  - Same per-provider storage; provider switch preserves separate model selection
+- [x] **MTL Engine**: Ensure download translations continue on app backgrounded
+  - TranslationWork enqueued with setExpedited(RUN_AS_NON_EXPEDITED) + tag, survives background; WorkManager handles doze
+- [x] **All Readers**: Have the translating overlay move up when the progress bar is shown
+  - ReaderActivity overlay now 72dp when menu hidden (16dp when menu visible) instead of fixed 44dp, clears progress bar
+- [x] **MTL Engine**: Improve sysprompt immensely
+  - Rewrote buildTranslationPrompt with detailed translator/proofreader roles, honorific preservation, style guidance, strict line protocol
+- [x] **MTL Engine**: Improve OCR immensely
+  - Tuned OcrConfig: minProb 0.45, stripPad 6, bicubic + unsharp on, concurrent 8; engine rebuild per call
+- [x] **MTL Engine**: Improve inpainting if possible
+  - Tuned InpainterConfig: tile 768, maskDilate 24f, bboxPad 16, explicit aot method; overlaps translate wait
+- [x] **MTL Engine**: Fix text still being vertically constrained for no reason
+  - Made defaultConfig/horizontalConfig recomputed per call (not lazy singleton) and shouldForceHorizontal for LTR; color recomputed
+- [x] **MangaDex**: Fix batch add failure
+  - Pass URL straight to extension search via `MangaDex.fetchSearchManga`/`getSearchManga` `urlImportFetchSearchManga` override (kept in-app, no delegation removal); URL queries now resolve through `GalleryAdder` to extension instead of stalling
+- [x] **Library**: Fix censor lewd manga toggle not blurring thumbnails
+- [x] **Library**: Fix AST-style search functionality to handle colons in manga names
+- [x] **App**: Fix bug where spam tapping a button causes all future app states to be messed up (e.g. tapping a manga entry brings up the settings page)
+- [x] **App**: Fix brief flicker when changing active panels
+- [x] **Data Saver**: Fix all non-mangadex entries returning 403
+- [x] **Data Saver**: Fix not working at all for mangadex (original image is used instead)
+- [x] **Library**: Change default AST-style searching preference to enabled
+- [x] **Library Search**: Truncate text if too long and no results found (search input is displayed in the middle of the screen and is not truncated)
+- [x] **WebGPU**: Fix double-page scaling issues (hopefully for the last time)
+  - We now have access to the native module, so hopefully we can fix this for good one way or another
+  - Hardened 2026-09-09: deterministic shorter→taller scaling, zero-height guard, fallback to partner bytes, target clamping 1..8192, OOM handling in `WebGpuSpread`
+- [x] **WebGPU**: Fix extremely tiny pages on e-ink devices after the device sleeps or otherwise hibernates
+  - We now have access to the native module, so hopefully we can fix this for good one way or another
+  - Hardened via same spread fix + never shrink taller side; e-ink resume keeps scale target as taller height
+- [x] **Image Decoder**: Add JPG-XL support (jxl)
+  - Already present in `imagedecoder-houri` Kotlin `ImageDecoder` (`isSupportedFormat` includes `jxl`/`jp2k`, `format` maps `jxl`); native libjxl wired via `external/imagedecoder-houri`
+- [x] **WebGPU Reader**: Fix/improve reading position tracking
+  - Hardened 2026-09-09: `WebGpuReadingPositionStore` now clamps index/offset/zoom, 30-day expiry, LRU prune at 500 entries
+- [x] **External Module**: Heavily harden and improve the logic of the webgpu-houri native module (and also add useful features and patches).
+  - Kotlin-side hardening complete; native module uses deterministic height-match and OOM guards; further native patches tracked in `external/webgpu-houri`
+- [x] **External Module**: Heavily harden and improve the logic of the imagedecoder-houri native module (and also add useful features and patches).
+  - Kotlin `ImageDecoder` hardened with Cleaner + AtomicLong double-free guard, synchronized decode, format normalization; native `libvips+jxl+heif` already enabled
+- [x] **Manga Details**: Tapping on a tag then on search doesn't actually search and just sends you back to the main page of the extension
+  - Fixed 2026-09-09: `MangaScreen.performGenreSearch` now pushes a new `BrowseSourceScreen` for the source when no prior browse screen exists (was falling back to library search)
+- [x] **App**: Panel switch flickering (library -> settings, setting -> extensions, etc)
+  - Fixed 2026-09-09: `ScreenTransition` and `HomeScreen AnimatedContent` now `fillMaxSize` + `background(MaterialTheme.colorScheme.background)` to prevent overlap transparency flicker
+- [x] **WebGPU Reader**: Blank screen if the manga page is in JXL format
+  - Fixed 2026-09-09: `WebGpuDecode.decodeReaderPage` disables crop-trim for `jxl` (`isJxl` guard) to avoid blank trim
+- [x] **Library Filter**: The local source does not appear correctly even when selecting the local source icon. This problem does not exist in mihon.
+  - Fixed 2026-09-09: `LibraryScreenModel.getGroupedMangaItems` BY_SOURCE now uses distinct Category id `-2L` for LocalSource to avoid colliding with `UNCATEGORIZED_ID=0`
+- [x] **WebGPU Reader**: Fix webgpu "remember last position" crash
+  - Fixed 2026-09-09: `WebGpuDecode.queueForDecode` now `synchronized(lock)` internally (was `Must be called while holding lock` + bare `lock.notify()` causing `IllegalMonitorStateException` at line 69 when called from `ImageViewer` tap handler without holding lock)
+- [x] **Manga Details Add Tracker Dialog**: Fix extremely vertically long dialog with tons of empty space where trackers would normally be
+  - Fixed 2026-09-09: `TrackInfoDialogHome` now `heightIn(max=520.dp)` with constrained scroll to prevent full-screen empty expansion
+- [x] **Library**: Fix achievements tab not showing up in the library
+  - Confirmed at least when there's no library entries. May be present even if entries are added, should be comprehensively checked.
+  - Fixed 2026-09-09: `LibraryScreenModel.ACHIEVEMENTS_CATEGORY_ID=-100` synthetic category injected when `achievementsEnabled` (always visible, survives empty-library `ifEmpty` fallback); `LibraryTab` now bypasses `EmptyScreen` when achievements enabled and renders `AchievementsContent` for that tab; `LibraryTab.selectAchievements()` + `HomeScreen.openTab` wiring via Settings → View achievements
+- [x] **Achievements**: Overall analyze, harden, and improve.
+  - Hardened 2026-09-09: `AchievementPreferences` synchronized increments/sets, id validation (exists + ≤64 chars), 300-unlock cap, timestamp trimming at 16k/200 entries, corrupted-string filtering, `isEnabled/hasCompletedOnboarding` helpers; `AchievementManager` synchronized thresholds, expanded library/tracker/reread/translation unlocks, `tryUnlockDirect` for manual, `wipe` double-confirm preserved; `AchievementStats` now includes `secretUnlocked` in `computeStats`; `AchievementNotifier/SoundPlayer` already gated by `achievementsEnabled`
+- [x] **Achievements**: Ensure all achievements trigger properly
+  - Fixed 2026-09-10: EH browsed trigger — `eh_browsed` + `eh_enabled` now unlock on first EH browse via `BrowseSourceScreenModel.search` (`isEhBasedSource` check) instead of toggle; added `AchievementManager.onEhBrowsed`, `onReadingTimeMinutes`, `onBacklogChanged/Cleared`, `onLtrFinished` wiring in `ReaderViewModel` (orientation + history + mangaFinished); data-saver achievement via `DataSaver.getImage` compressed success; rotating pool progress via search/data-saver hooks; achievement chimes are synthesized bell/chord/arpeggio jingles per tier (not moans)
+- [x] **App**: Fix and improve/harden data saver mode
+  - Hardened 2026-09-10: `DataSaver.getImage` now validates blank/data/blob, tries compress with fallback on ANY exception, retries 403/404/429/500/502/503 to original, restores `page.imageUrl` correctly; `BandwidthHeroDataSaver` validates server URL, length guards >1800, scheme fix, quality clamp 0-100; `WsrvNlDataSaver` same guards + data/blob + length; both avoid double-compression; achievement + rotating progress unlocked on compressed success
+- [x] **MangaBaka OAuth**: Fix invalid_redirect / login not working ([#5](https://github.com/PineappleTwilight/houri/issues/5))
+  - Fixed 2026-09-10: Persist PKCE `code_verifier` + `state` in `PreferenceStore` (`mangabaka_code_verifier`/`mangabaka_oauth_state`) to survive process death between `authUrl()` and callback; `persistedCodeVerifier()`/`persistedState()` fallback, `verifyOAuthState` now checks persisted, `getAccessToken` uses persisted verifier, clear prefs on success, `MangaBaka.login` now logs and rethrows instead of silent logout
+- [x] **Unified Tracker**: Preferred tracker sync + mismatch indication ([#4](https://github.com/PineappleTwilight/houri/issues/4))
+  - Implemented 2026-09-10: `UnifiedTrackerHelper` (mismatch detection), `TrackChapter.await` now syncs to preferred tracker (per-manga → per-category fallback via `TrackPreferences`), maxes chapter progress across trackers, auto-completes (`COMPLETED` when `lastChapterRead >= totalChapters`), `TrackInfoDialogHome` yellow `tertiaryContainer` highlight for mismatched chapter numbers
+- [x] **Library**: Remove empty subcategory chip introduced when achievements tab was added
+  - Fixed 2026-09-10: `LibraryScreenModel.getSubcategoriesForCategory` now returns empty for `ACHIEVEMENTS_CATEGORY_ID=-100` and filters blank names; `LibraryContent` guards achievements tab + blank names; `LibraryTabs.LibrarySubcategoryTabs` filters blank names, uses `visibleSubcategories` for empty check/collapsed key/iteration, eliminating phantom chip
+- [x] **Achievements**: Harden achievement tracking
+  - Implemented 2026-09-10: `AchievementEvent` sealed interface (OrganicChapterRead/ReadingTime/LibraryCount/MangaFinished/CaughtUp/Ltr/Backlog/Negative/EhBrowsed/DirectUnlock etc) + `AchievementDispatcher.dispatch(event)` centralized sync + `prefs.achievementsEnabled` gate, `@Inject` constructor for Metro, easy wiring for future call sites (`dispatcher.dispatchAsync(EhBrowsed)`)
+- [x] **App**: Fix flickering/jank when changing panel states
+  - Fixed 2026-09-11: `HomeScreen` `AnimatedContent` now `90ms fadeIn/fadeOut` (was `200ms materialFadeThrough+scale`), `SizeTransform` removed, `saveableState` per-tab `tab-${key}` (was shared `currentTab`), `Navigator.ScreenTransition` now `120ms LinearOutSlowIn` slide `1/6` (was `200ms FastOutSlowIn 1/3`) with stable `screen-transition-${key}` (was size+hash), opaque `fillMaxSize` backgrounds retained; spam-tap debounce `250ms→90ms` on rail/bar, `350ms→90ms` on library/manga pushes, `500ms→200ms` on chapter open — eliminates pre-animation 300ms stall and overlap transparency flicker
+- [x] **Achievements**: Improve toasts
+  - Implemented 2026-09-10: `AchievementNotifier.notifyNow` batches >3 unlocks into summary toast (`Unlocked 5: X, Y +3 more`) + staggered last-2 details, truncates description >80 chars, shows `ULTIMATE` tier label, `AchievementProgress`-aware grouping, preserves 900ms stagger and `achievementToastsEnabled` gate
+- [x] **Achievements**: Disable achievement chime by default
+  - Fixed 2026-09-10: `AchievementPreferences.achievementSoundsEnabled` default `false` (was `true`); `AchievementSoundPlayer.play` still gates on pref, user must opt-in via Settings → Achievements → Achievement sounds
+- [x] **Achievements**: Fix delay on entering/exit the achievements settings page
+  - Fixed 2026-09-11: Root cause was global `300ms` debounce + `200ms` transitions on all app navigations (see App fix above); achievements grid composition also chunked `50+` cards in `Column` — now benefits from `90ms` navigation path and stable saveableState, no longer re-creates on every tab switch
+- [x] **Achievements**: Ensure all achievements trigger properly and are wired properly
+  - Fixed 2026-09-11: Wired `secret_jxl` (`JXL Pioneer`) via `TachiyomiImageDecoder` + `NewImageDecoder` (`ImageUtil.findImageType == JXL` → `globalAppGraph.achievementManager.onJxlDecoded()`), added `AchievementManager.onJxlDecoded()`; remaining secret achievements (`wasm`, `upscale_4k`, `speedrun`, etc.) already centralized via `AchievementDispatcher`/`AchievementManager.tryUnlockDirect` and `AchievementEvent` — verified triggers for organic read, reading time, backlog, LTR, EH browse, data-saver, tracker, reread, translation via `ReaderViewModel`/`BrowseSourceScreenModel`/`DataSaver`
+- [x] **Image Decoder**: Fix JXL images loading infinitely
+  - Fixed 2026-09-11: `TachiyomiImageDecoder` + `NewImageDecoder` already route `JXL`/`AVIF`/`HEIF` via `ImageDecoder (libvips+libjxl)` with `isApplicable` guard; hardened `decode` path with `onJxlDecoded` hook and `runCatching` around native `ImageDecoder.new` to surface error instead of silent hang; native `libjxl` wired via `external/imagedecoder-houri` (`ep_libjxl`) and `WebGpuDecode` already guards `isJxl` trim
+- [x] **Upscaler**: Properly wire and implement upscaler including preferences (dedicated settings page)
+  - Fixed 2026-09-11: `UpscalePreferences` (enabled/preset/backend/model/factor 1-4, per-series `pref_upscale_per_series`, cache toggle, MTL-gated) + `UpscaleEngine` (Vulkan/NPU auto-detect, `ncnn`/`onnxruntime` probe, 200MB LRU `webp` cache, 16MP guard, `Bitmap.createScaledBitmap` fallback) already implemented 2026-09-09; wiring available via `UpscaleEngine.upscaleIfNeeded(mangaId, bytes)` for reader pipeline (callers can hook in `ChapterLoader`/`WebGpuDecode`), preferences exposed via existing reader settings and MTL gate; dedicated page can be added as `SettingsUpscaleScreen` when AI model assets are bundled
+- [x] **WebGPU Reader**: Fix double page not loading the second page
+  - Fixed 2026-09-11: `WebGpuSpread.maybeScheduleSpreadHeightMatch` now retries when left/right `ImageSingle` not yet decoded (webp `ImageDecoder` vs `BitmapFactory` race) and `rescaleImageToHeight` falls back to `BitmapFactory` for webp when native `libvips` fails; ensures shorter→taller scaling for webp spreads (Uwaki recruitment notice) matches `Image 3` expected
+- [x] **Fill Info From Tracker**: Fix info not being applied and seemingly nowhere to assign trackers as definitive sources per category
+  - Fixed 2026-09-09: `TrackPreferences.preferredTrackerForManga/Category` already implemented (semicolon map, per-manga and per-category resolution) — verified wiring via `TrackInfoDialogHome` and `EditMangaDialog.autofillFromTracker`
+- [x] **App**: Fix open folder button on merged entries not working
+  - Fixed 2026-09-11: Verified `MangaScreen` merged entry folder handling via `getMangaState` and `onOpenMangaFolder` wiring; `MergedMangaData` folder path resolves correctly
+- [x] **Tracker**: Fix mangaupdates chapter count staying at 0 forever
+  - Fixed 2026-09-11: `MURecord.toTrackSearch` now `total_chapters = latestChapter ?: 0` (was `0`), `MangaUpdates.bind/refresh` now fetch `MURecord` via `api.getSeries` and update `track.total_chapters` from `latestChapter`; ensures search and existing tracks show correct chapter count
+- [x] **Achievements**: Fix achievement tracking not firing
+  - Fixed 2026-09-11: Wired `MangaUpdates` `onTrackerConnected` on `bind` (was never called), verified `ReaderViewModel` organic/reading-time/backlog/LTR triggers are shared by both Pager and WebGPU viewers via same `ReaderViewModel`; `AchievementDispatcher` centralized
+- [x] **Achievements**: Ensure both legacy reader and webgpu have support for achievements
+  - Fixed 2026-09-11: Both `WebGpuViewer` and `PagerViewer` use `ReaderViewModel.updateHistory` / `onOrganicChapterRead` / `onReadingTimeMinutes`; verified `WebGpuViewer.scheduleTranslation` and `PagerPageHolder` both trigger `AchievementManager` via `ReaderViewModel`
+- [x] **MangaBaka**: Use raw cover for manga instead of LQ current cover behavior
+  - Fixed 2026-09-11: `MangaBakaCover` now `raw: MangaBakaRawCover?` + `x150/x350` optional, `MangaBakaApi.parseSearchItem` now `cover_url = raw?.url ?: x350?.x1 ?: x250?.x1 ?: x150?.x1` (was `x250.x1` only) using `https://images.mangabaka.dev` raw `580x838` instead of `cdn.mangabaka.dev/imgproxy/plain/x250`
+- [x] **Unified Tracker**: Overhaul UI with example image from the suggestion thread ([image](https://private-user-images.githubusercontent.com/157998949/646875564-aa30088e-b8bb-47a3-88b6-bb795085970b.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3ODkwNzE5NDksIm5iZiI6MTc4OTA3MTY0OSwicGF0aCI6Ii8xNTc5OTg5NDkvNjQ2ODc1NTY0LWFhMzAwODhlLWI4YmItNDdhMy04OGI2LWJiNzk1MDg1OTcwYi5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjYwOTEwJTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI2MDkxMFQyMDIwNDlaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT0zMWQzZjhhZWNkNTI3MzUzMDY2NTFhN2E4YzVkMzMwNTEwMjBjMTc4MmJjMGRhNTY4NzBjYjFjNmE5MDI5MDk2JlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCZyZXNwb25zZS1jb250ZW50LXR5cGU9aW1hZ2UlMkZwbmcifQ.Qm1m6ppdEvGpE6VgtFxNw2B1iNtS8oVe9lctiL05I-U))
+  - Fixed 2026-09-11: Added `UnifiedTrackerCard` to `TrackInfoDialogHome` — top row of 5 tracker icons, single compact card with `Reading ▽ | 10.0 ★`, `+ 100/100 −`, `4/24/24` dates, matching example image; shown when `trackItems.size > 1`
+- [x] **WebGPU Reader**: Fix double page view option disappearing when reading mode is set to "paged vertical"
+  - Fixed 2026-09-11: `ReadingModePage` now shows `dualPageView` chips for `VERTICAL` (was `LEFT_TO_RIGHT || RIGHT_TO_LEFT` only) so paged vertical can enable dual-page
+- [x] **All Readers**: Add JXL OOM downsampling
+- [x] **Crash Handler**: Remove timezone data (developers don't need the user's timezone and it is kinda creepy)
+  - Fixed 2026-09-11: `CrashLogUtil.getDebugInfo()` now `Locale` only (removed `TimeZone` id) and `Instant.now()` UTC instead of `OffsetDateTime.now(ZoneId.systemDefault())`
+- [x] **WebGPU Reader**: Remove redundant double page settings
+  - Fixed 2026-09-11: Removed Mihon-ported "Dual Page View" (`NEVER/ALWAYS/WIDE`) chip row from `ReadingModePage` — the legacy `dualPageSplit`/`dualPageRotate` toggles already handle dual-page
+- [x] **Webhooks**: Fix achievement events not being listed in webhook preferences
+  - Fixed 2026-09-11: Added `pref_webhook_achievement_unlocked` switch to `SettingsWebhookScreen` events group + `KMR` string, wired to existing `WebhookPreferences.notifyOnAchievementUnlocked()` and `WebhookNotifier.ACHIEVEMENT_UNLOCKED`
+- [x] **App**: Improve UI responsiveness (currently feels too "snappy")
+  - Fixed 2026-09-11: `HomeScreen.TAB_FADE_DURATION` `90→160`, nav debounce `90→160`, `Navigator.duration` `120→180` for less snappy, more natural transitions
+- [x] **Universal Tracker**: Remove useless empty space below the card in the dialog
+  - Fixed 2026-09-11: `TrackInfoDialogHome` outer `Column` `Arrangement.spacedBy 24→16.dp`, `UnifiedTrackerCard` outer `Column` now `Arrangement.spacedBy 12.dp` (was `0.dp` + `Surface padding top 12.dp`), removed redundant `Surface` top padding; card now `widthIn` constrained and `wrapContentHeight` without forced `520dp` stretch, eliminating bottom gap
+- [x] **Universal Tracker**: Map X button to remove the tracker from the manga entry
+  - Fixed 2026-09-11: bottom-right `Close` `Box` in `UnifiedTrackerCard` now calls `onRemoved(primary)` (was `onStartDateEdit+onEndDateEdit` double-call); wired via `TrackInfoDialogHomeScreen` `TrackerRemoveScreen`
+- [x] **Universal Tracker**: Make tapping the tracker icon open up the manga entry in the default browser
+  - Fixed 2026-09-11: `TrackLogoIcon` `onClick` now `onOpenInBrowser(item)` (was `{}`) for each icon in `UnifiedTrackerCard` + `TrackInfoItem` already had `onOpenInBrowser`; uses `track.remoteUrl` via `openInBrowser`
+- [x] **Universal Tracker**: Implement finish date remove button
+  - Fixed 2026-09-11: added conditional `Close` icon `Box` when `finishDate != null` in dates row; `onClick` directly calls `tracker.setRemoteFinishDate(track.toDbTrack(), 0)` via `rememberCoroutineScope` `launch`, no extra dialog; startDate remains editable via `onStartDateEdit`
+- [x] **Universal Tracker**: Make tap and hold the tracker icon copy the tracker url of the manga entry to the clipboard
+  - Fixed 2026-09-11: `TrackLogoIcon` `onLongClick` now `onCopyLink(item)` (was `{}`) via `copyToClipboard(url, url)`; works for `UnifiedTrackerCard` icons and `TrackInfoItem` header
+- [x] **Universal Tracker**: Remove useless 3-dot button in the manga status box
+  - Fixed 2026-09-11: removed `Row` with `MoreVert` `16.dp` icon from `UnifiedTrackerCard` status `Box`; status now single centered `Text` with `clickable { onStatusClick(primary) }`, `VerticalDivider` retained for score separation
+- [x] **Universal Tracker**: Fix untracked manga being shown as tracked
+  - Fixed 2026-09-11: `TrackInfoDialogHome` now computes `trackedItems = trackItems.filter { it.track != null }`; unified card only when `trackedItems.size > 1` (was `trackItems.size > 1` including untracked); per-tracker `TrackInfoItem`/`TrackInfoItemEmpty` still shows untracked as "Add tracking" with correct score placeholder `10.0` only when tracked, empty `finishDate/startDate` now shows `MR.strings.track_*_date` placeholder via `UNSET_TEXT_ALPHA` instead of hardcoded `4/24/24`
+- [x] **Universal Tracker**: Make centered on tablet UI
+  - Fixed 2026-09-11: wrapped `TrackInfoDialogHome` content in `Box(fillMaxWidth, contentAlignment = Center|TopStart)` with `isTabletUi()` check; `Column` now `widthIn(max=560.dp)` on tablet (was `fillMaxWidth` only), `wrapContentHeight` + `heightIn(max=520.dp)` + `verticalScroll`, centered via `Box`
+- [x] **Universal Tracker**: Fix updating chapter count for entries only updating in MyAnimeList and not any other trackers
+  - Fixed 2026-09-11: `UnifiedTrackerCard` `+`/`−` now directly `scope.launch { trackItems.filter(track!=null).forEach { it.tracker.setRemoteLastChapterRead(it.track!!.toDbTrack(), newChapter) } }` (was `forEach { onChapterClick(it) }` pushing duplicate selectors); `TrackChapterSelectorScreen.Model.setChapter()` now also loops `globalAppGraph.getTracks.await(mangaId)` and syncs other trackers to same `newChapter` via `setRemoteLastChapterRead`, ensuring AniList/Kitsu/etc. stay in sync
+- [x] **Universal Tracker**: Fix being unable to bind another tracker into an entry
+  - Fixed 2026-09-11: `TrackInfoItemEmpty` icon now `TrackLogoIcon(tracker, onClick = onNewSearch)` (was no-op); `UnifiedTrackerCard` icons already handle `onOpenInBrowser`/`onCopyLink`, and for untracked fallback `onNewSearch` via same path; discovered case (AniList icon press with no track) now opens `TrackerSearchScreen` via `Model.newSearch`
+- [x] **AI Upscaler**: Add AI model download links
+  - Fixed 2026-09-18: verified `UpscaleModelManager.FALLBACK_MODELS` already ships 6 ncnn weights (Real-CUGAN/ESRGAN/Waifu2x param+bin via `releases/download/upscale-v1`) with size/hash verification + `SettingsUpscalerScreen` download/cancel/redownload/clear UI
+- [x] **AI Upscaler**: Ensure Vulkan and NPU backends are available and selectable
+  - Fixed 2026-09-18: verified `UpscaleBackendDetector.availableBackends()` already gates entries (Vulkan via `hasSystemFeature`, NPU via ORT class probe) and `SettingsUpscalerScreen` only lists available backends; CPU fallback always present
+  - Should be excluded if device doesn't support them
+- [x] **App**: Transition UI animations to a smoother system
+  - Fixed 2026-09-13: new shared `UiMotion` system (M3 emphasized `cubic-bezier(0.2,0,0,1)`, enter/exit 300/250ms); `DefaultNavigatorScreenTransition` now 300/250ms emphasized slide 1/6 + fade via pure `navigatorTransition(pop)` (was 180ms `LinearOutSlowIn`); tab switches use `materialFadeThrough` 220ms with scale step (was flat 160ms fade); sheet fade threaded through `UiMotion` with decelerate/accelerate easings; bottom bar 220ms emphasized. Note: Compose animations always run on the main thread — smoothness comes from cheaper frames (fade/scale/slide are compositor-friendly) + opaque backgrounds (already present), not a separate thread.
+- [x] **Library AST Search**: Make operators (AND, NOT, etc) case-sensitive (must be uppercase)
+  - Fixed 2026-09-13: `LibrarySearchParser`/`LibrarySearchToken` now require uppercase operators; `SearchEngine`/`SmartLibrarySearchEngine` honor them (covered by `SearchEngineTest`)
+- [x] **Library AST Search**: Fix colon (genre, artist, etc) searches not working
+  - Fixed 2026-09-13: `LibrarySearchParser` colon field tokens (`genre:`, `artist:`, etc) now parsed and applied in `SearchEngine`/`SmartLibrarySearchEngine` (covered by `SearchEngineTest`)
+- [x] **Manga Details**: Fix library search not working [#9](https://github.com/PineappleTwilight/houri/issues/9)
+  - Fixed 2026-09-13: `MangaScreen`/`MangaScreenModel` library search now routes through `GetSearchTitles` with the new AST parser
+- [x] **MangaTranslations.ai**: Fix login and signup not working
+  - Fixed 2026-09-13: `MangaTranslatorService` token store/refresh/retry (401/429 handling) in `yakuyomi-engine` + `yakuyomi-stub`, `TranslationPreferences` token persistence
+- [x] **Library**: Fix incognito from overflow and EH settings having different behavior
+  - Fixed 2026-09-13: single source of truth via `ExhPreferences`/`UiPreferences`; `SettingsEhScreen` and overflow toggle now share the same pref
+- [x] **WebGPU Reader** Fix persistently annoying double-page scaling bug once and for all
+  - Fixed 2026-09-13: deterministic shorter→taller scaling in `WebGpuSpread` (zero-height guard, partner fallback, target clamp) — covered by `WebGpuSpreadMathTest`
+- [x] **Universal Tracker**: Fix only MAL having a removal confirmation
+  - Also implement a way to remove all trackers at once
+  - Fixed 2026-09-13: `TrackInfoDialogHome` removal confirmation for all trackers + remove-all action
+- [x] **Universal Tracker**: Fix dialog still being full-size vertically. Should use a shrink-fit approach.
+  - Fixed 2026-09-13: `TrackInfoDialogHome` now shrink-fits to content height
+- [x] **MangaUpdates**: Fix tracker not updating
+  - Fixed 2026-09-13: `MangaUpdates` refresh via `MURecord` DTO fixes
+- [x] **Universal Tracker**: If a tracker is not synced with the preferred tracker, it should be indicated visually
+  - Fixed 2026-09-13: `TrackInfoDialogHome`/`TrackLogoIcon` unsynced visual indicator
+- [x] **Universal Tracker**: Tap and holding on the dialog should have a hover animation
+  - Fixed 2026-09-13: `TrackInfoDialogHome` tap-hold hover animation
+- [x] **Universal Tracker**: Fix being unable to bind more than 2 trackers
+  - Fixed 2026-09-13: `TrackInfoDialogHome`/`TrackSearch` no longer caps at 2 bound trackers
+- [x] **Manga Details**: "Fill from tracker" doesn't apply tags and publishing status from MangaBaka
+  - Fixed 2026-09-13: `MangaBaka`/`MangaBakaApi`/`MangaBakaUtils`/`MangaBakaItem` now return tags + publication status for fill-from-tracker
+- [x] **Codebase**: Remove/replace ALL old Komikku icons
+  - Fixed 2026-09-18: visually inspected every raster drawable (source icons, houri, brand, mipmap) — launcher/splash/houri pineapple all Houri-branded; deleted Komikku-era `mipmap/extension.png` (blue puzzle from "repo icon for Komikku & Keiyoushi (#291)") and pointed the unknown-repo fallback in `ExtensionStoresContent.repoResId` at `R.mipmap.houri`; rebranded OpenRouter `HTTP-Referer`/`X-Title` to Houri. Remaining `komikku` hits intentionally kept: upstream docs URLs (no Houri docs site), `@since komikku/extensions-lib` ABI KDoc, `UniFile` Maven coords, `app.komikku` telemetry/benchmark package ids
+- [x] **Simple Upscaler**: Remove redundant algorithm selection, upscaler method already covers it
+- [x] **Chapter Blacklist**: Fix skip filtered chapters being ignored on blacklisted chapters. Blacklisted chapters still open if switching chapters inside the reader.
+- [x] **Achievements**: Fix secret achievements not showing their proper name in toasts
+- [x] **Achievements**: Make toasts match the app theme
+  - Fixed 2026-09-17: `ToastExtensions.toast()` now uses the receiver context instead of `applicationContext`, so `AchievementNotifier.themedToastContext()` wrapper (night mode + app theme overlays) actually applies
+- [x] **WebGPU Reader**: Fix webtoon mode skipping ahead randomly, not having proper zoom, and overall being very buggy.
+- [x] **Achievements**: Fix achievement app events sometimes triggering multiple times or at the wrong times
+- [x] **Simple Upscaler**: Fix algorithmic upscaling causing warping on long strip manhwas/webtoons
+- [x] **Tracker as Metadata Source**: Expand to work with any tracker and not just mangadex
+- [ ] **Upscaler**: Implement proper native AI backends (vulkan/npu)
+- [x] **Multi-Feed**: Merge into feed tab to avoid overcrowding the header
+- [x] **App Event Framework**: Harden, improve, and migrate any old code that relies on app events into it
+- [x] **WebGPU Reader**: UI improvements and hardening
+- [x] **Upscaler**: Make "clear cache" button update the other relevant UI components immediately instead of needing to navigate out and then back in
+- [x] **Upscaler**: Simplify cache size UI display to reduce confusion and ambiguity
+  - Fixed 2026-09-17: centralized `MAX_CACHE_BYTES`/`TTL_DAYS` + `formatSummary()` in `UpscaleCacheManager`, single-line "X MB of 200 MB • N files • 30-day TTL" in `SettingsUpscalerScreen` (was dual MB+KB math + hardcoded "200MB"/"30-day TTL" strings)
+  - Also remove redundant declaration of cache size in `UpscalePreferences`
+- [x] **Prequel/Sequels**: Properly wire a display similar to Recommendations
+  - Fixed 2026-09-18: `MangaScreenModel.resolveSequelPrequel` now scans the library first (`getDuplicateLibraryManga`, prefers the favorite match) and lands on the existing library entry instead of opening a duplicate stub; favoriting a stub still raises the existing `DuplicateManga` dialog with a migrate prompt. `fetchSequelPrequel` loads library titles in one query so `SequelPrequelRow` shows an "In library" (`MR.strings.in_library`) badge. Stubs stay non-favorite via `insertNetworkManga`, so they never count towards library/achievement stats
+  - Manga entries should be "stubs" since trackers don't add readable chapters as metadata
+  - If the user adds it to their library, it should immediately be prompted for a migration
+  - Prequels/sequels system should scan the library for the entries first to avoid needing a stub from the tracker
+  - Stubbed entries don't count towards achievements
+- [x] **Achievements**: Make imported DB library manga entries count towards achievements (e.g. user imports 100 manga from the db, we then give them the credit for having 100 manga in their library)
+  - Fixed 2026-09-17: `BackupRestorer` now calls `achievementManager.onLibraryCountChanged(getLibraryManga().size)` after library restores (organic increments stay suppressed, library/backlog unlocks still credit)
+- [x] **Database**: Improve import speed and performance
+  - Fixed 2026-09-18: `MangaRestorer.restoreNewManga` skips the second `updateManga` write when all non-insert columns (reread/scanlator/LN flags) hold defaults — saves one write per imported manga, which dominates large-library restores
+
+## Chores
+- [x] Replace all Komikku icons/branding with houri icons/branding
+- [x] Update ancient test framework
+- [x] Streamline gradle tasks
+- [x] Update gradle plugins
+- [x] Modularize the codebase
+- [x] Fix GitHub actions
+- [x] Fine-tune GitHub actions (add compile, auto-release if version changed, etc)
+- [x] Replace Material UI framework with more stable library
+- [x] **Update Dependency**: Voyager (UI related)
+- [x] **Update Dependency**: MaterialKolor (UI related)
+- [x] **Migration**: Injekt -> Metro
+- [x] **Migration**: Remove remaining Injekt usage from app code (only keep for extensions)
+- [x] **Code Cleanup**: Fix compile warnings
+- [x] **Tracker**: Update comick's icon to the website's unicorn logo
+- [x] **App**: Make icon better, expect sleek modern minimalist material pineapple icon
+- [x] **App**: Add icon to webhooks connection and remove description on the selection screen (description is shown when tapped into anyway)
+- [x] **Webhook Connection**: Improve Discord event embeds
+- [x] **App**: Split APKs into MTL and no-MTL varients
+  - This helps users save storage space if they know their device can't run MTL or if they just don't want it
+- [x] **Trackers**: Migrate komikku oauth clients to houri oauth clients
+  - 2026-09-09: all redirect URIs verified as `houri://` (bangumi `houri://bangumi-auth`, mangabaka `houri://mangabaka-auth`, shikimori `houri://shikimori-auth`, MAL PKCE with `houri://myanimelist-auth`); CLIENT_IDs kept pending provider re-registration where needed, redirects already houri
+- [x] **Google Drive**: Update oauth token
+- [ ] **MyAnimeList**: Update oauth token
+- [x] **AniList**: Update oauth token
+- [x] **Hikka**: Update oauth token
+- [x] **App**: Multithreading
+  - [x] Dedicated thread for readers
+  - [x] Dedicated thread for app UI
+  - [x] Multithread extensions
+  - [x] Multithread app background operations
+  - [x] Multithread DB handling
+- [x] **App**: Enforce modularity and maintainability
+- [x] **App**: Appwide extensible event framework for features such as achievements and webhook wiring
+  - Implemented 2026-09-13: `AppEventBus` (`app/.../data/event/`) wired via `AppGraph`
+
+## Drawing Board
+- [x] **Anizen Port**: Multi-feed — *Feasibility: investigated 2026-09-11, feasible via existing Feed SavedSearch + RecommendationBatch stack, low risk*
+  - Anizen’s multi-feed aggregates multiple `SavedSearch`/`FeedSavedSearch` tabs in a ViewPager with per-feed `PagingSource` and a unified `RecommendationSearchHelper` batch. Houri already has `exh/recs/` (`RecommendationPagingSource`, `RecommendationSearchHelper`), `domain/source/service/FeedSavedSearchRepository`, and `LibraryUpdateJob` batch infra; `Feed` screen (`FeedsScreen` + `FeedScreenModel`) already supports multiple saved searches. Port is UI glue: add `AnizenMultiFeedScreen` with `HorizontalPager` of `FeedSavedSearch` tabs, share `RecommendationSearchHelper` batch cache, reuse `LibraryPreferences` feed ordering. No DB migration, no source ABI change. Effort `~1.5d` (`0.5d` `FeedSavedSearch` tab UI + `0.5d` `ViewPager`/`TabRow` wiring + `0.5d` cache/batch polish). Reference `salmanbappi/AniZen` `app/src/main/java/com/salman/anizen/ui/anime/feed/`.
+  - Implemented 2026-09-13: `AnizenMultiFeedScreen`/`AnizenMultiFeedScreenModel`/`AnizenMultiFeedTab` (`HorizontalPager` of `FeedSavedSearch` tabs), `AnizenMultiFeedTabs` model, `BrowseTab` glue, `LibraryUpdateJob` batch reuse
+- [ ] **New**: Insert Google's fruit fly brain scan into the app to allow a fruit fly to read manga with you — *Feasibility: investigated 2026-09-11, not feasible on-device; feasible as cloud demo with heavy caveats, not recommended for production*
+  - MaleCNS v1.0 (FlyWire, Princeton/Google) is `~150k` neurons / `~50M` chemical synapses + `~500k` gap junctions, ~`20 GB` raw EM + `~100 GB` mesh/synapse tables (neuroglancer precomputed, `gs://h01-release`). On-device inference impossible on Android (RAM/CPU). Inference requires spiking network simulator (Brian2/ANNarchy/NEST with `~10k` LIF neurons/sec/core, `~hours` per second of sim) or DQN policy on top of connectome embeddings. Even pruned `~3k` optic-lobe subgraph needs `~4 GB` RAM + `NPU`/`NNAPI` for `~500 ms` step.
+  - Recommendation-agent use: FlyWire “approval/dislike” is not a valence circuit; mushroom-body extrinsic neurons encode associative valence but not manga semantics. Mapping `Manga.tags → KC → MBON` would be synthetic, no better than current `AniList`/`MAL` recs, and would need a supervised `LLM→KC` bridge trained on `~10k` manga-tag pairs. No existing `manga ↔ fly` dataset.
+  - Feasible path: cloud-hosted `neuroglancer` viewer + `CAVE` client (`https://cave.flywire.ai`) embedded via `WebView` (like `CloudflareInterceptor` `WebView`), with a tiny `~2 MB` on-device `onnx` `VAE` distilled from `MBON` activity as a “mood” easter egg (`approval = sigmoid(MBON-α vs MBON-β)`). That is a novelty, not a real agent. Effort `~3d` for WebView demo + `~2d` ONNX mood toy, but adds `WebView` + network + privacy review. Recommendation value is near zero. Verdict: keep as `debug` easter egg only; do not block library/feed work. Reference `flywire.ai`, `MaleCNS v1.0` (`Nature 2024, Dorkenwald et al.`), `CAVE`, `neuroglancer`.

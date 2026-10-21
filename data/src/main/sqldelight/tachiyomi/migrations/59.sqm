@@ -1,0 +1,9 @@
+-- KMK -->
+-- Migration 59: let a category be bound to a tracker status, so #35 can move an entry
+-- between status categories when its tracker status changes.
+--
+-- NULL means "not bound": a status change must never add to or remove from an unbound
+-- category, so a folder the user happened to name "Reading" is safe from being reorganised.
+-- No backfill - every existing row starts unbound and keeps behaving exactly as before.
+ALTER TABLE categories ADD COLUMN track_status INTEGER;
+-- KMK <--

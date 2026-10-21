@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- KMK -->
+    <plurals name="reread_count">
+        <item quantity="one">%1$d reread</item>
+        <item quantity="other">%1$d rereads</item>
+    </plurals>
+    <plurals name="category_update_interval_days">
+        <item quantity="one">Every day</item>
+        <item quantity="other">Every %1$d days</item>
+    </plurals>
+    <plurals name="duplicate_manga_count">
+        <item quantity="one">%1$d duplicate</item>
+        <item quantity="other">%1$d duplicates</item>
+    </plurals>
+    <plurals name="novel_search_result_count">
+        <item quantity="one">%1$d match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
+</resources>

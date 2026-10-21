@@ -1,0 +1,293 @@
+CREATE VIEW historyView AS
+SELECT
+    history._id AS id,
+    mangas._id AS mangaId,
+    chapters._id AS chapterId,
+    mangas.title,
+    mangas.thumbnail_url AS thumbnailUrl,
+    mangas.source,
+    mangas.favorite,
+    mangas.cover_last_modified,
+    chapters.chapter_number AS chapterNumber,
+    -- KMK -->
+    mangas.chapter_flags AS chapterFlags,
+    chapters.read AS read,
+    chapters.last_page_read AS lastPageRead,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    coalesce(C.bookmarkReadCount, 0) AS bookmarkReadCount,
+    -- KMK --> The same four counts on the row basis, for the merge being off. The queries below
+    -- pick one basis or the other with :smartScanlatorMerge, the same preference the details list
+    -- and the library badge read: with the merge off every upload is a chapter again, so a series
+    -- carried by two groups showed "3 of 10" where the reader could see 20 chapters.
+    coalesce(C.totalUploads, 0) AS totalUploads,
+    coalesce(C.readUploads, 0) AS readUploads,
+    coalesce(C.bookmarkUploads, 0) AS bookmarkUploads,
+    coalesce(C.bookmarkReadUploads, 0) AS bookmarkReadUploads,
+    -- KMK <--
+    history.last_read AS readAt,
+    history.time_read AS readDuration,
+    max_last_read.last_read AS maxReadAt,
+    max_last_read.chapter_id AS maxReadAtChapterId
+FROM mangas
+JOIN chapters
+ON mangas._id = chapters.manga_id
+JOIN history
+ON chapters._id = history.chapter_id
+JOIN (
+    SELECT chapters.manga_id,chapters._id AS chapter_id, MAX(history.last_read) AS last_read
+    FROM chapters JOIN history
+    ON chapters._id = history.chapter_id
+    GROUP BY chapters.manga_id
+) AS max_last_read
+ON chapters.manga_id = max_last_read.manga_id
+-- KMK -->
+LEFT JOIN(
+    SELECT
+        chapters.manga_id,
+        -- KMK --> Same chapter-number counting as libraryView, for the same reason: a series with
+        -- several scanlator groups stores one row per upload, so count(*) made the History tab's
+        -- "read of total" progress and its unfinished filter count a chapter once per group. All
+        -- four aggregates share one distinct basis so the arithmetic below cannot go negative.
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS total,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.read = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS readCount,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0 AND chapters.bookmark = 1
+                THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0 AND chapters.bookmark = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkCount,
+        CAST(
+            count(DISTINCT CASE WHEN chapters.chapter_number > 0
+                AND chapters.bookmark = 1 AND chapters.read = 1
+            THEN CAST(round(chapters.chapter_number * 100) AS INTEGER) END)
+            + sum(CASE WHEN chapters.chapter_number <= 0
+                AND chapters.bookmark = 1 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkReadCount,
+        -- KMK --> Row basis, for the merge being off. Counted over the same filtered rows as the
+        -- number basis above, so the two agree on a series only one scanlator carries.
+        CAST(count(*) AS INTEGER) AS totalUploads,
+        CAST(sum(CASE WHEN chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER) AS readUploads,
+        CAST(sum(CASE WHEN chapters.bookmark = 1 THEN 1 ELSE 0 END) AS INTEGER) AS bookmarkUploads,
+        CAST(
+            sum(CASE WHEN chapters.bookmark = 1 AND chapters.read = 1 THEN 1 ELSE 0 END) AS INTEGER
+        ) AS bookmarkReadUploads,
+        -- KMK <--
+        excluded_scanlators.scanlator AS ex_scanlator
+    FROM chapters
+    LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+    -- KMK --> Same blacklist filter libraryView applies. Without it a blacklisted chapter stays
+    -- in this aggregate while the library badge and the details list have already dropped it, so
+    -- the History tab's "read of total" and its unfinished filter disagree with both. Both key
+    -- widths from scanlatorBlacklistKey() are matched: the broad one covers every upload of a
+    -- number from a scanlator, the narrowed one a single upload, so blacklisting one version of a
+    -- chapter a scanlator published twice no longer leaves it counted here.
+    LEFT JOIN mangas BM
+    ON BM._id = chapters.manga_id
+    -- KMK <--
+    WHERE ex_scanlator IS NULL
+    -- KMK -->
+    AND (
+        BM.blacklisted_chapters = ''
+        OR (
+            instr(
+                ', ' || BM.blacklisted_chapters || ', ',
+                ', ' || CAST(round(chapters.chapter_number * 100) / 100.0 AS TEXT)
+                    || '@' || trim(coalesce(chapters.scanlator, '')) || ', '
+            ) = 0
+            AND instr(
+                ', ' || BM.blacklisted_chapters || ', ',
+                ', ' || CAST(round(chapters.chapter_number * 100) / 100.0 AS TEXT)
+                    || '@' || trim(coalesce(chapters.scanlator, '')) || '#'
+                    || substr(trim(chapters.url), 1, 256) || ', '
+            ) = 0
+        )
+    )
+    -- KMK <--
+    GROUP BY chapters.manga_id
+) AS C
+ON mangas._id = C.manga_id;
+-- KMK <--
+
+-- KMK --> Every projection below picks one counting basis with :smartScanlatorMerge and applies it
+-- to all four aggregates at once, so the bookmark arithmetic stays inside a single basis: mixing
+-- them is what migration 61 warned about, and a view cannot take the parameter itself.
+--
+-- The switch is the OUTER case on purpose. SQLDelight orders a query's parameters by where they
+-- first appear in its text, so writing it there makes the generated signature
+-- (smartScanlatorMerge, bookmarkUnmask, bookmarkMask, ...) read the same way the projection does.
+-- Nested the other way round, :bookmarkMask would come first and the switch would land between the
+-- two masks, which no reader of the call site could guess.
+
+history:
+SELECT
+id,
+mangaId,
+chapterId,
+title,
+thumbnailUrl,
+source,
+favorite,
+cover_last_modified,
+chapterNumber,
+-- KMK -->
+read,
+lastPageRead,
+CASE
+    WHEN :smartScanlatorMerge = 1 THEN
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN totalCount - bookmarkCount
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkCount
+            ELSE totalCount
+        END
+    ELSE
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN totalUploads - bookmarkUploads
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkUploads
+            ELSE totalUploads
+        END
+END AS totalCountCalculated,
+CASE
+    WHEN :smartScanlatorMerge = 1 THEN
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN readCount - bookmarkReadCount
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkReadCount
+            ELSE readCount
+        END
+    ELSE
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN readUploads - bookmarkReadUploads
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkReadUploads
+            ELSE readUploads
+        END
+END AS readCountCalculated,
+-- KMK <--
+readAt,
+readDuration
+FROM historyView
+WHERE historyView.readAt > 0
+-- KMK -->
+AND (
+    :unfinishedManga IS NULL
+    OR (:unfinishedManga = 1 AND totalCountCalculated > readCountCalculated)
+    OR (:unfinishedManga = 0 AND totalCountCalculated <= readCountCalculated)
+)
+AND (:unfinishedChapter IS NULL OR read != :unfinishedChapter)
+AND (:nonLibraryEntries IS NULL OR favorite != :nonLibraryEntries)
+-- KMK <--
+AND maxReadAtChapterId = historyView.chapterId
+AND lower(historyView.title) LIKE ('%' || :query || '%')
+ORDER BY readAt DESC;
+
+getLatestHistory:
+SELECT
+id,
+mangaId,
+chapterId,
+title,
+thumbnailUrl,
+source,
+favorite,
+cover_last_modified,
+chapterNumber,
+-- KMK -->
+read,
+lastPageRead,
+CASE
+    WHEN :smartScanlatorMerge = 1 THEN
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN totalCount - bookmarkCount
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkCount
+            ELSE totalCount
+        END
+    ELSE
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN totalUploads - bookmarkUploads
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkUploads
+            ELSE totalUploads
+        END
+END AS totalCount,
+CASE
+    WHEN :smartScanlatorMerge = 1 THEN
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN readCount - bookmarkReadCount
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkReadCount
+            ELSE readCount
+        END
+    ELSE
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN readUploads - bookmarkReadUploads
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkReadUploads
+            ELSE readUploads
+        END
+END AS readCount,
+-- KMK <--
+readAt,
+readDuration
+FROM historyView
+WHERE historyView.readAt > 0
+ORDER BY readAt DESC
+LIMIT 1;
+
+-- KMK --> Resuming from the History tab walks back through the most recent
+-- entries until one has a chapter left, so it needs them in order rather than
+-- just the newest. Same projection as getLatestHistory, capped by the caller.
+getRecentHistory:
+SELECT
+id,
+mangaId,
+chapterId,
+title,
+thumbnailUrl,
+source,
+favorite,
+cover_last_modified,
+chapterNumber,
+-- KMK -->
+read,
+lastPageRead,
+CASE
+    WHEN :smartScanlatorMerge = 1 THEN
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN totalCount - bookmarkCount
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkCount
+            ELSE totalCount
+        END
+    ELSE
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN totalUploads - bookmarkUploads
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkUploads
+            ELSE totalUploads
+        END
+END AS totalCount,
+CASE
+    WHEN :smartScanlatorMerge = 1 THEN
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN readCount - bookmarkReadCount
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkReadCount
+            ELSE readCount
+        END
+    ELSE
+        CASE
+            WHEN (chapterFlags & :bookmarkUnmask) != 0 THEN readUploads - bookmarkReadUploads
+            WHEN (chapterFlags & :bookmarkMask) != 0 THEN bookmarkReadUploads
+            ELSE readUploads
+        END
+END AS readCount,
+-- KMK <--
+readAt,
+readDuration
+FROM historyView
+WHERE historyView.readAt > 0
+ORDER BY readAt DESC
+LIMIT :limit;

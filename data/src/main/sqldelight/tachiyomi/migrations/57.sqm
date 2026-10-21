@@ -1,0 +1,8 @@
+-- KMK -->
+-- Migration 57: per-chapter bookmark colour, so a bookmark can record *why* the
+-- chapter was kept (returning to, favourite scene, translation check, ...).
+--
+-- 0 is "no colour chosen" and stays the default so every pre-existing bookmark
+-- keeps working and renders exactly as it did before.
+ALTER TABLE chapters ADD COLUMN bookmark_color INTEGER NOT NULL DEFAULT 0;
+-- KMK <--

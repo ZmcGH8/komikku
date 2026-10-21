@@ -1,0 +1,1199 @@
+package eu.kanade.presentation.more.settings.screen
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.more.settings.PreferenceDependency
+import eu.kanade.tachiyomi.util.system.toast
+import exh.yakuyomi.ModelCatalog
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toPersistentList
+import mihon.app.di.globalAppGraph
+import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
+
+object SettingsYakuyomiScreen : SearchableSettings {
+    @ReadOnlyComposable
+    @Composable
+    override fun getTitleRes() = KMR.strings.pref_yakuyomi_enabled
+
+    @Composable
+    override fun getPreferences(): List<Preference> {
+        val prefs = remember { globalAppGraph.translationPreferences }
+        val isNomtl = eu.kanade.tachiyomi.BuildConfig.IS_NOMTL
+        val provider by prefs.provider().collectAsState()
+        val isMangatranslator = provider == "mangatranslator"
+
+        // KMK --> Hub-and-spoke: this screen stays a compact hub (status, common
+        // enable/target/typeset controls, provider selector, navigation rows,
+        // advanced tools, sessions). Full provider, model and behavior controls
+        // live in SettingsYakuyomiProviderScreen, SettingsYakuyomiModelsScreen
+        // and SettingsYakuyomiBehaviorScreen, which reuse the groups below.
+        return listOfNotNull(
+            getStatusOverview(),
+            getGeneralGroup(prefs, hideLocal = isMangatranslator),
+            getProviderSelectorGroup(prefs),
+            getHubNavGroup(prefs),
+            getAdvancedGroup(prefs).takeIf { !isNomtl && !isMangatranslator },
+            getSessionsGroup(),
+        )
+        // KMK <--
+    }
+
+    @Composable
+    private fun getStatusOverview(): Preference.PreferenceGroup {
+        val prefs = remember { globalAppGraph.translationPreferences }
+        val manager = remember { globalAppGraph.localLlmManager }
+        val enabled by prefs.enabled().collectAsState()
+        val provider by prefs.provider().collectAsState()
+        val localModelKey by prefs.localModel().collectAsState()
+        val running by manager.running.collectAsState()
+        val loading by manager.loading.collectAsState()
+        val downloadStatus by remember { globalAppGraph.localLlmDownloadManager.status }.collectAsState()
+
+        val resolvedLocalModel = remember(localModelKey, provider, downloadStatus) { manager.resolveModel() }
+        val isModelReady = remember(downloadStatus, resolvedLocalModel) {
+            resolvedLocalModel != null && globalAppGraph.localLlmDownloadManager.isDownloaded(resolvedLocalModel)
+        }
+
+        val isNomtl = eu.kanade.tachiyomi.BuildConfig.IS_NOMTL
+        val (dotColor, lines) = when {
+            !enabled -> Color(0xFF9E9E9E) to listOf("MTL is off — enable it below to translate pages")
+            isNomtl -> {
+                val mt = prefs.mangaTranslatorEnabled().collectAsState().value
+                when {
+                    mt || provider == "mangatranslator" -> Color(0xFF4CAF50) to listOf("Off-device: MangaTranslator ready — no local engine needed")
+                    else -> Color(0xFFE53935) to listOf("No-MTL build — enable MangaTranslator for off-device translation")
+                }
+            }
+            provider == "local" -> {
+                when {
+                    loading -> Color(0xFFFFA726) to listOf("Local engine: starting…")
+                    running -> Color(0xFF4CAF50) to listOf("Local engine running — ${resolvedLocalModel?.displayName ?: "unknown model"}")
+                    isModelReady -> Color(0xFF9E9E9E) to listOf("Local engine stopped — ${resolvedLocalModel?.displayName ?: "auto"} ready")
+                    else -> Color(0xFFE53935) to listOf("Local provider: no model downloaded yet")
+                }
+            }
+            else -> Color(0xFF4CAF50) to listOf("Cloud provider: ${provider.ifBlank { "openrouter" }}")
+        }
+
+        return Preference.PreferenceGroup(
+            title = "Status",
+            preferenceItems = listOf(
+                Preference.PreferenceItem.CustomPreference(
+                    // Only an index key — CustomPreference renders `content` alone.
+                    title = "Status",
+                    content = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium, vertical = 8.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor),
+                            )
+                            Text(
+                                text = lines.joinToString("\n"),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    },
+                ),
+            ).toPersistentList(),
+        )
+    }
+
+    @Composable
+    private fun getGeneralGroup(
+        prefs: exh.yakuyomi.TranslationPreferences,
+        hideLocal: Boolean = false,
+    ): Preference.PreferenceGroup {
+        val enabled by prefs.enabled().collectAsState()
+        val context = LocalContext.current
+        // Collected, not read: the About easter egg flips the RAM gate at runtime and this
+        // drives whether the master switch is usable.
+        val ramGateDisabled by eu.kanade.presentation.more.settings.RamGateState.isDisabled.collectAsState()
+        val lowRam = !ramGateDisabled && !exh.yakuyomi.DeviceMemory.hasSufficientRam(context, exh.yakuyomi.DeviceMemory.MTL_MIN_RAM_BYTES)
+        return Preference.PreferenceGroup(
+            // KMK --> No header: every row below is already self-labelled, and a header
+            // repeating the "Enable AI Translation" switch title was pure duplication.
+            title = "",
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = prefs.enabled(),
+                        title = stringResource(KMR.strings.pref_yakuyomi_enabled),
+                        enabled = !lowRam,
+                    ),
+                )
+                if (lowRam) {
+                    add(
+                        Preference.PreferenceItem.InfoPreference(
+                            title = "This device has too little RAM for AI translation (needs 3GB+). " +
+                                "Translation is disabled to avoid crashes. Reading, downloads and all other features are unaffected.",
+                        ),
+                    )
+                }
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = prefs.targetLang(),
+                        entries = persistentMapOf(
+                            "en" to "English (EN)",
+                            "es" to "Español (ES)",
+                            "fr" to "Français (FR)",
+                            "de" to "Deutsch (DE)",
+                            "pt" to "Português (PT)",
+                            "ru" to "Русский (RU)",
+                            "it" to "Italiano (IT)",
+                            "pl" to "Polski (PL)",
+                            "tr" to "Türkçe (TR)",
+                            "id" to "Indonesia (ID)",
+                            "ar" to "العربية (AR)",
+                            "zh" to "中文 (ZH)",
+                            "ja" to "日本語 (JA)",
+                            "ko" to "한국어 (KO)",
+                            "th" to "ไทย (TH)",
+                            "vi" to "Tiếng Việt (VI)",
+                        ),
+                        title = stringResource(KMR.strings.pref_yakuyomi_target_lang),
+                        subtitle = stringResource(KMR.strings.pref_yakuyomi_target_lang) + ": %s",
+                        enabled = enabled,
+                    ),
+                )
+                if (!hideLocal) {
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = prefs.fontFamily(),
+                            entries = persistentMapOf(
+                                "casual" to "Manga (Casual)",
+                                "sans-serif" to "Sans-serif",
+                                "sans-serif-condensed" to "Sans-serif Condensed",
+                                "serif" to "Serif",
+                                "serif-monospace" to "Serif Monospace",
+                                "monospace" to "Monospace",
+                                "cursive" to "Cursive",
+                                "default" to "System default",
+                            ),
+                            title = stringResource(KMR.strings.pref_yakuyomi_font_family),
+                            subtitle = stringResource(KMR.strings.pref_yakuyomi_font_family_summary) + ": %s",
+                            enabled = enabled,
+                            // KMK --> on-device typesetting only; MangaTranslator returns finished images.
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = prefs.translationTextColor(),
+                            entries = persistentMapOf(
+                                0xFF000000.toInt() to "Black (default)",
+                                0xFFFFFFFF.toInt() to "White",
+                                0xFF0000FF.toInt() to "Blue",
+                                0xFFFF0000.toInt() to "Red",
+                                0xFF008000.toInt() to "Green",
+                                0xFFFF8C00.toInt() to "Orange",
+                                0xFF800080.toInt() to "Purple",
+                            ),
+                            title = stringResource(KMR.strings.pref_yakuyomi_text_color),
+                            subtitle = stringResource(KMR.strings.pref_yakuyomi_text_color_summary) + ": %s",
+                            enabled = enabled,
+                            // KMK -->
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                }
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    internal fun getProviderGroup(prefs: exh.yakuyomi.TranslationPreferences): Preference.PreferenceGroup {
+        val enabled by prefs.enabled().collectAsState()
+        val provider by prefs.provider().collectAsState()
+        val apiKey by prefs.apiKeyForProvider(provider).collectAsState()
+        val baseUrl by prefs.customBaseUrl().collectAsState()
+        val model by prefs.modelForProvider(provider).collectAsState()
+        val geminiNanoEnabled by prefs.geminiNanoEnabled().collectAsState()
+        val legacyApiKey by prefs.apiKey().collectAsState()
+        val legacyModel by prefs.model().collectAsState()
+        var migratedProviders by remember { mutableStateOf(setOf<String>()) }
+        LaunchedEffect(provider, legacyApiKey, legacyModel) {
+            if (provider in migratedProviders) return@LaunchedEffect
+            val perKeyBlank = prefs.apiKeyForProvider(provider).get().isBlank()
+            val perModelBlank = prefs.modelForProvider(provider).get().isBlank()
+            if (perKeyBlank && legacyApiKey.isNotBlank()) {
+                prefs.apiKeyForProvider(provider).set(legacyApiKey)
+            }
+            if (perModelBlank && legacyModel.isNotBlank()) {
+                prefs.modelForProvider(provider).set(legacyModel)
+            }
+            migratedProviders = migratedProviders + provider
+        }
+
+        var fetchedModels by remember { mutableStateOf<List<String>>(emptyList()) }
+        var fetchingModels by remember { mutableStateOf(false) }
+        var modelFetchFailed by remember { mutableStateOf(false) }
+        var refreshTick by remember { mutableStateOf(0) }
+
+        LaunchedEffect(provider, apiKey, baseUrl, refreshTick) {
+            val currentProvider = provider
+            val endpoint = ModelCatalog.modelsEndpoint(currentProvider, baseUrl)
+            if (endpoint == null || currentProvider == "local") {
+                fetchedModels = emptyList()
+                modelFetchFailed = false
+                fetchingModels = false
+                return@LaunchedEffect
+            }
+            if (currentProvider.equals("gemini", ignoreCase = true) && apiKey.isBlank()) {
+                fetchedModels = emptyList()
+                modelFetchFailed = false
+                fetchingModels = false
+                return@LaunchedEffect
+            }
+            if (currentProvider == "custom_openai" && baseUrl.isBlank()) {
+                fetchedModels = emptyList()
+                modelFetchFailed = false
+                fetchingModels = false
+                return@LaunchedEffect
+            }
+            fetchingModels = true
+            modelFetchFailed = false
+            val models = withIOContext {
+                runCatching {
+                    ModelCatalog.fetchModels(currentProvider, apiKey, baseUrl, globalAppGraph.networkHelper.client)
+                }.getOrDefault(emptyList())
+            }
+            if (currentProvider != provider) return@LaunchedEffect
+            if (models.isNotEmpty()) {
+                fetchedModels = models
+                modelFetchFailed = false
+            } else {
+                fetchedModels = emptyList()
+                modelFetchFailed = true
+            }
+            fetchingModels = false
+        }
+
+        val entries = remember(fetchedModels, provider, model) {
+            val base = ModelCatalog.fallbackModels[provider].orEmpty()
+            val all = (fetchedModels + base + listOfNotNull(model.takeIf { it.isNotBlank() })).distinct().sorted()
+            persistentMapOf(*all.map { it to it }.toTypedArray())
+        }
+
+        val apiKeySubtitle = when {
+            apiKey.isBlank() -> stringResource(KMR.strings.pref_yakuyomi_api_key_missing)
+            else -> apiKey.take(4) + "••••••••"
+        }
+
+        val isLocalProvider = provider == "local"
+        val isMangatranslatorProvider = provider == "mangatranslator"
+        // KMK --> no-MTL builds only ever translate via MangaTranslator (stub errors out
+        // every other provider), so offering them would show options that can never work.
+        val isNomtl = eu.kanade.tachiyomi.BuildConfig.IS_NOMTL
+        // KMK <--
+
+        // KMK --> auto-enable when the user *switches to* MangaTranslator (it is the only
+        // provider that can translate without the MTL engine), but never on plain screen
+        // entry — otherwise the toggle can never stay off.
+        var lastProvider by remember { mutableStateOf(provider) }
+        LaunchedEffect(provider) {
+            if (isMangatranslatorProvider && lastProvider != "mangatranslator" && !prefs.enabled().get()) {
+                prefs.enabled().set(true)
+            }
+            lastProvider = provider
+        }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(KMR.strings.pref_yakuyomi_provider),
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = prefs.geminiNanoEnabled(),
+                        title = stringResource(KMR.strings.pref_yakuyomi_gemini_nano),
+                        subtitle = stringResource(KMR.strings.pref_yakuyomi_gemini_nano_summary),
+                        enabled = enabled,
+                        // KMK --> on-device Nano needs the MTL engine; stub builds always report unavailable.
+                        mtlOnly = true,
+                        // KMK <--
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.CustomPreference(
+                        title = "Gemini Nano device status",
+                        // KMK -->
+                        mtlOnly = true,
+                        // KMK <--
+                        content = {
+                            var statusText by remember { mutableStateOf("Checking…") }
+                            var nanoRefreshTick by remember { mutableStateOf(0) }
+                            LaunchedEffect(geminiNanoEnabled, nanoRefreshTick) {
+                                statusText = withIOContext {
+                                    val nano = globalAppGraph.geminiNanoTranslator
+                                    when {
+                                        !geminiNanoEnabled -> "Disabled by toggle — cloud provider will be used"
+                                        nano.isAvailable() -> "Available — on-device translation active"
+                                        else -> {
+                                            val err = nano.statusError()
+                                            if (!err.isNullOrBlank() && (
+                                                    err.contains("601") || err.contains("BINDING") ||
+                                                        err.contains("606") || err.contains("FEATURE_NOT_FOUND")
+                                                    )
+                                            ) {
+                                                "AICore is still setting up (${err.substringAfter("error code ").substringBefore(":").trim()}) — " +
+                                                    "update Google AI Core / restart the device, then check again. Cloud provider will be used meanwhile."
+                                            } else {
+                                                "Not available on this device right now — cloud provider will be used. " +
+                                                    "If this device supports Gemini Nano (e.g. Pixel 8+/Samsung S24+), AICore may still be provisioning — " +
+                                                    "update Google AI Core and restart, then re-open this screen."
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Column(modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp)) {
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                if (geminiNanoEnabled) {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { nanoRefreshTick = nanoRefreshTick + 1 },
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    ) {
+                                        Text("Recheck")
+                                    }
+                                }
+                            }
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = prefs.provider(),
+                        // KMK --> nomtl: only MangaTranslator can ever translate (see above).
+                        entries = if (isNomtl) {
+                            persistentMapOf(
+                                "mangatranslator" to "MangaTranslator (remote)",
+                            )
+                        } else {
+                            persistentMapOf(
+                                "openrouter" to "OpenRouter",
+                                "gemini" to "Gemini",
+                                "opencode_zen" to "OpenCode Zen",
+                                "nvidia_nim" to "NVIDIA NIM",
+                                "custom_openai" to "Custom OpenAI",
+                                "local" to "Local (On-device LLM)",
+                                "mangatranslator" to "MangaTranslator (remote)",
+                            )
+                        },
+                        // KMK <--
+                        title = stringResource(KMR.strings.pref_yakuyomi_provider),
+                        enabled = enabled,
+                    ),
+                )
+                // KMK --> Cloud-only options are irrelevant while the local provider is selected, and entirely hidden for mangatranslator (separate system).
+                if (!isLocalProvider && !isMangatranslatorProvider) {
+                    add(
+                        Preference.PreferenceItem.EditTextPreference(
+                            preference = prefs.apiKeyForProvider(provider),
+                            title = stringResource(KMR.strings.pref_yakuyomi_api_key),
+                            subtitle = apiKeySubtitle,
+                            enabled = enabled,
+                            // KMK --> cloud LLM keys are unusable without the MTL engine.
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = prefs.modelForProvider(provider),
+                            entries = entries,
+                            title = stringResource(KMR.strings.pref_yakuyomi_model),
+                            subtitle = "%s",
+                            subtitleProvider = { v, _ -> v },
+                            enabled = enabled,
+                            // KMK -->
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.TextPreference(
+                            title = stringResource(KMR.strings.pref_yakuyomi_model_refresh),
+                            subtitle = when {
+                                fetchingModels -> stringResource(KMR.strings.pref_yakuyomi_model_fetching)
+                                modelFetchFailed -> stringResource(KMR.strings.pref_yakuyomi_model_fetch_failed)
+                                fetchedModels.isNotEmpty() ->
+                                    stringResource(KMR.strings.pref_yakuyomi_model_fetch_done, fetchedModels.size)
+                                else -> null
+                            },
+                            onClick = {
+                                refreshTick = refreshTick + 1
+                            },
+                            enabled = enabled,
+                            // KMK -->
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                }
+                // KMK <--
+                add(
+                    Preference.PreferenceItem.EditTextPreference(
+                        preference = prefs.customBaseUrl(),
+                        title = "Custom API Base URL",
+                        subtitle = if (provider == "custom_openai" && baseUrl.isBlank()) {
+                            stringResource(KMR.strings.pref_yakuyomi_base_url_required)
+                        } else {
+                            "Base URL for OpenAI-compatible endpoint, e.g. https://api.example.com/v1"
+                        },
+                        enabled = enabled && provider == "custom_openai",
+                        // KMK --> only meaningful while the custom provider is selected.
+                        dependsOn = PreferenceDependency(source = prefs.provider(), expected = "custom_openai"),
+                        // KMK <--
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.EditTextPreference(
+                        preference = prefs.customHeaders(),
+                        title = "Custom Headers",
+                        subtitle = "Key: Value per line, e.g. X-API-Key: abc",
+                        enabled = enabled && provider in setOf("custom_openai", "opencode_zen", "nvidia_nim"),
+                    ),
+                )
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    internal fun getLocalLlmGroup(): Preference.PreferenceGroup? {
+        val prefs = remember { globalAppGraph.translationPreferences }
+        val manager = remember { globalAppGraph.localLlmManager }
+        val downloadManager = remember { globalAppGraph.localLlmDownloadManager }
+        val context = LocalContext.current
+        val enabled by prefs.enabled().collectAsState()
+        val provider by prefs.provider().collectAsState()
+        val localEnabled = enabled && provider == "local"
+        // KMK --> The local group is irrelevant unless the local provider is selected.
+        if (!localEnabled) return null
+        // KMK <--
+        val status by downloadManager.status.collectAsState()
+        val running by manager.running.collectAsState()
+        val loading by manager.loading.collectAsState()
+        val localModelKey by prefs.localModel().collectAsState()
+        val autoStart by prefs.localLlmAutoStart().collectAsState()
+        val entryNavigator = LocalNavigator.currentOrThrow
+        var importTick by remember { mutableStateOf(0) }
+        val importing by manager.importing.collectAsState()
+        val importedModels = remember(importTick, status) { manager.importedModels() }
+        val model = remember(localModelKey, provider, importTick, status) { manager.resolveModel() }
+        val best = remember { exh.yakuyomi.LocalLlmCatalog.bestForDevice(exh.yakuyomi.DeviceMemory.totalRamBytes(context)) }
+        val runtimeBundled = manager.isRuntimeAvailable()
+        val modelReady = remember(status, model) {
+            model != null && downloadManager.isDownloaded(model)
+        }
+
+        val entries = remember(importTick, status) {
+            val base = persistentMapOf<String, String>("" to "Auto — best for this device")
+            val catalog = exh.yakuyomi.LocalLlmCatalog.allModels.associate { it.id to it.displayName }
+            val imported = importedModels.associate { it.id to it.displayName }
+            persistentMapOf(*((base + catalog + imported).toList()).toTypedArray())
+        }
+
+        // KMK --> Custom GGUF import: background copy (never freezes the UI for multi-GB files),
+        // original filename preserved, re-imports detected and just re-selected.
+        // KMK <--
+        val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri != null) {
+                manager.importGguf(uri) { result, error ->
+                    if (result != null) {
+                        importTick = importTick + 1
+                        if (result.duplicate) {
+                            context.toast("Already imported — switched to ${result.model.displayName}")
+                        } else {
+                            context.toast("Imported ${result.model.displayName}")
+                        }
+                    } else {
+                        context.toast("Failed to import GGUF: ${error ?: "unknown error"}")
+                    }
+                }
+            }
+        }
+
+        val actionTitle = when (status.state) {
+            exh.yakuyomi.LocalLlmDownloadManager.State.DOWNLOADING -> "Cancel download"
+            exh.yakuyomi.LocalLlmDownloadManager.State.READY -> "Redownload"
+            else -> "Download model"
+        }
+
+        val modelSubtitle = when (val m = model) {
+            null -> "No model fits this device"
+            else -> {
+                val tier = when (m.qualityTier) {
+                    5 -> "Best"
+                    4 -> "High"
+                    3 -> "Good"
+                    else -> "Basic"
+                }
+                val vision = if (m.supportsVision) " · vision" else ""
+                val finetune = if (m.isTranslationFinetune) " · TL finetune" else ""
+                "$tier · ${m.paramsB}$vision$finetune · ${m.sizeBytes / (1024 * 1024)} MB"
+            }
+        }
+
+        val engineState = when {
+            running -> "Running — ${model?.displayName ?: "unknown model"}"
+            loading -> "Starting… — ${model?.displayName ?: "selected model"}"
+            modelReady -> "Stopped — ${model?.displayName ?: "auto"} ready"
+            else -> "Stopped — no model downloaded yet"
+        }
+
+        return Preference.PreferenceGroup(
+            title = "Local (On-device LLM)",
+            // KMK --> downloading multi-GB LLM weights is pointless on low-RAM devices.
+            ramGated = true,
+            // KMK <--
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = prefs.localModel(),
+                        entries = entries,
+                        title = "Local model",
+                        subtitleProvider = { v, _ ->
+                            when {
+                                v.isNullOrBlank() -> "Auto — ${best?.displayName ?: "none"}${if (!runtimeBundled) " · Runtime not bundled" else ""}"
+                                else -> modelSubtitle
+                            }
+                        },
+                        enabled = localEnabled,
+                    ),
+                )
+                if (model != null) {
+                    add(
+                        Preference.PreferenceItem.TextPreference(
+                            title = stringResource(KMR.strings.pref_yakuyomi_llm_advanced),
+                            subtitle = "Sampling, context and threads for ${model.displayName}",
+                            onClick = { entryNavigator.push(SettingsYakuyomiLlmAdvancedScreen(model)) },
+                            enabled = localEnabled,
+                        ),
+                    )
+                }
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = if (importing) "Importing GGUF…" else "Import GGUF from device",
+                        subtitle = when {
+                            importing -> "Copying…"
+                            importedModels.isEmpty() -> "Pick .gguf file"
+                            else -> importedModels.joinToString(", ") { it.displayName }
+                        },
+                        onClick = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
+                        enabled = localEnabled && !importing,
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = if (running) "Stop engine" else "Start engine",
+                        subtitle = engineState,
+                        onClick = { if (running) manager.stop() else manager.start() },
+                        enabled = localEnabled && modelReady,
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = prefs.localLlmAutoStart(),
+                        title = "Start engine on app launch",
+                        subtitle = "Preload so first translation is instant",
+                        enabled = localEnabled && modelReady,
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.CustomPreference(
+                        title = "Download",
+                        content = {
+                            Column(modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium, vertical = 8.dp)) {
+                                when (status.state) {
+                                    exh.yakuyomi.LocalLlmDownloadManager.State.READY -> {
+                                        Text(text = "Installed: ${status.downloadedBytes / (1024 * 1024)} MB", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                    exh.yakuyomi.LocalLlmDownloadManager.State.DOWNLOADING -> {
+                                        val percent = (status.progress * 100).toInt()
+                                        val mb = status.downloadedBytes / (1024 * 1024)
+                                        val totalMb = (status.totalBytes / (1024 * 1024)).coerceAtLeast(mb)
+                                        val speedMb = status.speedBytesPerSecond / (1024 * 1024)
+                                        Text(
+                                            text = "Downloading $percent% — $mb/$totalMb MB" + if (speedMb > 0) " · $speedMb MB/s" else "",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        if (status.etaSeconds > 0) {
+                                            Text(text = "About ${formatEta(status.etaSeconds)} left", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { status.progress },
+                                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                        )
+                                    }
+                                    exh.yakuyomi.LocalLlmDownloadManager.State.ERROR -> {
+                                        Text(text = status.error ?: "Download failed", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                                    }
+                                    else -> Text(text = "Not installed", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = actionTitle,
+                        onClick = {
+                            when (status.state) {
+                                exh.yakuyomi.LocalLlmDownloadManager.State.DOWNLOADING -> manager.cancelDownload()
+                                else -> manager.startDownload()
+                            }
+                        },
+                        enabled = localEnabled && manager.isRuntimeAvailable(),
+                    ),
+                )
+                if (model != null || importedModels.isNotEmpty() || status.state == exh.yakuyomi.LocalLlmDownloadManager.State.READY) {
+                    add(
+                        Preference.PreferenceItem.TextPreference(
+                            title = "Clear local model",
+                            subtitle = if (model?.isCustom == true) "Delete imported GGUF" else "Remove downloaded files",
+                            onClick = {
+                                manager.clearModel()
+                                importTick = importTick + 1
+                                context.toast("Local model cleared")
+                            },
+                            enabled = localEnabled && status.state != exh.yakuyomi.LocalLlmDownloadManager.State.DOWNLOADING,
+                        ),
+                    )
+                }
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    internal fun getModelGroup(modelManager: exh.yakuyomi.ModelManager): Preference.PreferenceGroup {
+        val status by modelManager.status.collectAsState()
+        val context = LocalContext.current
+        // Collected, not read: the About easter egg flips the RAM gate at runtime and this
+        // drives whether the master switch is usable.
+        val ramGateDisabled by eu.kanade.presentation.more.settings.RamGateState.isDisabled.collectAsState()
+        val lowRam = !ramGateDisabled && !exh.yakuyomi.DeviceMemory.hasSufficientRam(context, exh.yakuyomi.DeviceMemory.MTL_MIN_RAM_BYTES)
+        val modelsClearedText = stringResource(KMR.strings.mtl_models_cleared)
+        val actionTitle = when (status.state) {
+            exh.yakuyomi.ModelManager.State.DOWNLOADING -> stringResource(KMR.strings.mtl_models_cancel)
+            exh.yakuyomi.ModelManager.State.READY -> stringResource(KMR.strings.mtl_models_redownload)
+            else -> stringResource(KMR.strings.mtl_models_download)
+        }
+        return Preference.PreferenceGroup(
+            title = stringResource(KMR.strings.mtl_models_title),
+            // KMK --> on-device model weights need both the MTL engine and enough RAM.
+            mtlOnly = true,
+            ramGated = true,
+            // KMK <--
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.CustomPreference(
+                    title = stringResource(KMR.strings.mtl_models_title),
+                    content = {
+                        Column(modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium, vertical = 8.dp)) {
+                            when (status.state) {
+                                exh.yakuyomi.ModelManager.State.READY -> {
+                                    Text(
+                                        text = stringResource(KMR.strings.mtl_models_ready, status.downloadedBytes / (1024 * 1024)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                                exh.yakuyomi.ModelManager.State.DOWNLOADING -> {
+                                    val percent = (status.progress * 100).toInt()
+                                    Text(
+                                        text = stringResource(KMR.strings.mtl_models_downloading, percent),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Spacer(modifier = Modifier.padding(vertical = 4.dp))
+                                    // Padding on both sides so the bar doesn't touch the screen edges.
+                                    LinearProgressIndicator(
+                                        progress = { status.progress },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
+                                    )
+                                    if (!status.currentFile.isNullOrBlank()) {
+                                        Spacer(modifier = Modifier.padding(vertical = 4.dp))
+                                        Text(
+                                            text = "File: ${status.currentFile}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                                exh.yakuyomi.ModelManager.State.ERROR -> {
+                                    Text(
+                                        text = stringResource(KMR.strings.mtl_models_error, status.error ?: "unknown"),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                else -> {
+                                    Text(
+                                        text = stringResource(KMR.strings.mtl_models_missing),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
+                        }
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = actionTitle,
+                    onClick = {
+                        when (status.state) {
+                            exh.yakuyomi.ModelManager.State.DOWNLOADING -> modelManager.cancelDownload()
+                            exh.yakuyomi.ModelManager.State.READY -> modelManager.startDownload(force = true)
+                            else -> modelManager.startDownload()
+                        }
+                    },
+                    enabled = !lowRam,
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.mtl_models_clear),
+                    subtitle = stringResource(KMR.strings.mtl_models_clear_summary),
+                    onClick = {
+                        modelManager.clearModels()
+                        context.toast(modelsClearedText)
+                    },
+                    enabled = !lowRam && status.state != exh.yakuyomi.ModelManager.State.DOWNLOADING,
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    internal fun getRemoteModelGroup(
+        prefs: exh.yakuyomi.TranslationPreferences,
+        modelManager: exh.yakuyomi.ModelManager,
+    ): Preference.PreferenceGroup {
+        val enabled by prefs.enabled().collectAsState()
+        val context = LocalContext.current
+        val customActive = remember { modelManager.customUrlsActive() }
+        return Preference.PreferenceGroup(
+            title = "Remote model URLs",
+            // KMK --> custom on-device model URLs are meaningless without the MTL engine.
+            mtlOnly = true,
+            // KMK <--
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.InfoPreference(
+                    title = "Use https URLs to override the built-in model manifest or individual OCR/detector/inpainter files. Leave blank to use the default GitHub releases. Requires re-download to take effect.",
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = prefs.modelManifestUrl(),
+                    title = stringResource(KMR.strings.pref_yakuyomi_model_manifest_url),
+                    subtitle = stringResource(KMR.strings.pref_yakuyomi_model_manifest_url_summary) + ": %s",
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = prefs.customOcrModelUrl(),
+                    title = stringResource(KMR.strings.pref_yakuyomi_model_ocr_url),
+                    subtitle = stringResource(KMR.strings.pref_yakuyomi_model_ocr_url_summary) + ": %s",
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = prefs.customInpainterModelUrl(),
+                    title = stringResource(KMR.strings.pref_yakuyomi_model_inpainter_url),
+                    subtitle = stringResource(KMR.strings.pref_yakuyomi_model_inpainter_url_summary) + ": %s",
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = prefs.customDetectorModelUrl(),
+                    title = stringResource(KMR.strings.pref_yakuyomi_model_detector_url),
+                    subtitle = stringResource(KMR.strings.pref_yakuyomi_model_detector_url_summary) + ": %s",
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = "Re-download with custom URLs",
+                    subtitle = if (customActive) "Custom URLs are active — tap to fetch" else "Set a URL above, then tap to re-download",
+                    onClick = {
+                        modelManager.startDownload(force = true)
+                        context.toast("Downloading with custom URLs…")
+                    },
+                    enabled = enabled,
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    internal fun getMangaTranslatorGroup(prefs: exh.yakuyomi.TranslationPreferences): Preference.PreferenceGroup {
+        val enabled by prefs.enabled().collectAsState()
+        val navigator = LocalNavigator.currentOrThrow
+        val email by prefs.mangaTranslatorEmail().collectAsState()
+        val token by prefs.mangaTranslatorAccessToken().collectAsState()
+        val authSubtitle = when {
+            token.isNotBlank() && email.isNotBlank() -> "Logged in as $email — session active (like the extension)"
+            token.isNotBlank() -> "Logged in — session active (tap to manage)"
+            else -> "Not logged in — anonymous (rate-limited). Tap to log in via ichigo.moe"
+        }
+        return Preference.PreferenceGroup(
+            title = "MangaTranslator service",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.mangaTranslatorEnabled(),
+                    title = stringResource(KMR.strings.pref_mangatranslator_enabled),
+                    subtitle = stringResource(KMR.strings.pref_mangatranslator_enabled_summary),
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = prefs.mangaTranslatorBaseUrl(),
+                    title = stringResource(KMR.strings.pref_mangatranslator_base_url),
+                    subtitle = "%s",
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = "Account — MangaTranslator / ichigo.moe",
+                    subtitle = authSubtitle,
+                    onClick = { navigator.push(SettingsMangaTranslatorAuthScreen) },
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.mangaTranslatorCachePermanent(),
+                    title = stringResource(KMR.strings.pref_mangatranslator_cache_permanent),
+                    subtitle = stringResource(KMR.strings.pref_mangatranslator_cache_permanent_summary),
+                    enabled = enabled,
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_mangatranslator_manage_cache),
+                    subtitle = stringResource(KMR.strings.pref_mangatranslator_manage_cache_summary),
+                    onClick = { navigator.push(SettingsMangaTranslatorCacheScreen) },
+                    enabled = enabled,
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    internal fun getBehaviorGroup(
+        prefs: exh.yakuyomi.TranslationPreferences,
+        cache: exh.yakuyomi.TranslationCache,
+        hideLocal: Boolean = false,
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val enabled by prefs.enabled().collectAsState()
+        val cacheEnabled by prefs.cacheEnabled().collectAsState()
+        var cacheTick by remember { mutableStateOf(0) }
+        val cacheBytes = remember(cacheTick, cacheEnabled) { cache.sizeBytes() }
+        return Preference.PreferenceGroup(
+            title = "Behavior & Cache",
+            preferenceItems = buildList {
+                if (!hideLocal) {
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = prefs.offlineFallback(),
+                            title = stringResource(KMR.strings.pref_yakuyomi_offline_fallback),
+                            subtitle = "Keep original art when the API call fails (otherwise pages are marked failed and retried)",
+                            enabled = enabled,
+                            // KMK --> on-device pipeline behavior; MangaTranslator manages its own fallback.
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = prefs.cacheEnabled(),
+                            title = stringResource(KMR.strings.pref_yakuyomi_cache_enabled),
+                            subtitle = "Cache translated pages per model (WEBP, 32MB cap, 30d expiry)",
+                            enabled = enabled,
+                            // KMK -->
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = prefs.autoTranslateOnDownload(),
+                            title = stringResource(KMR.strings.pref_yakuyomi_auto_download),
+                            subtitle = "Prewarm translation when chapters are downloaded (respects per-manga toggle)",
+                            enabled = enabled,
+                            // KMK -->
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = prefs.saveTranslatedPages(),
+                            title = "Save translated pages to chapter folder",
+                            subtitle = "Keep translated WEBP images alongside originals to avoid re-translating",
+                            enabled = enabled,
+                            // KMK -->
+                            mtlOnly = true,
+                            // KMK <--
+                        ),
+                    )
+                }
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Clear translation cache",
+                        subtitle = "Current: ${cacheBytes / 1024} KB / 32768 KB",
+                        onClick = {
+                            cache.clearAll()
+                            cacheTick = cacheTick + 1
+                            context.toast("Translation cache cleared")
+                        },
+                        enabled = enabled,
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.EditTextPreference(
+                        preference = prefs.translationTextColorHex(),
+                        title = stringResource(KMR.strings.pref_yakuyomi_text_color_custom),
+                        subtitle = "Custom hex (e.g. #FFFFFF) — overrides preset: %s",
+                        validator = { it.isBlank() || HEX_COLOR_REGEX.matches(it.trim().removePrefix("#")) },
+                        enabled = enabled,
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = prefs.autoSaveWhileReading(),
+                        title = "Auto-save while reading",
+                        subtitle = "Save translated pages as you read",
+                        enabled = enabled,
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = prefs.breadcrumbWindowSize(),
+                        entries = persistentMapOf(
+                            3 to "3 chapters",
+                            5 to "5 chapters",
+                            8 to "8 chapters",
+                            10 to "10 chapters",
+                        ),
+                        title = "Context window",
+                        subtitle = "Sliding window for translation consistency: %s",
+                        enabled = enabled,
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.InfoPreference(
+                        title = "EN → EN uses grammar/vocab fix (same LLM). Uploads gated by Incognito/Censor.",
+                    ),
+                )
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    internal fun getAdvancedGroup(prefs: exh.yakuyomi.TranslationPreferences): Preference.PreferenceGroup {
+        val enabled by prefs.enabled().collectAsState()
+        val navigator = LocalNavigator.currentOrThrow
+        return Preference.PreferenceGroup(
+            title = "Advanced",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_yakuyomi_engine_advanced),
+                    subtitle = "Detector / OCR / Inpaint / Typeset — not recommended, unsupported",
+                    onClick = { navigator.push(SettingsYakuyomiEngineAdvancedScreen()) },
+                    enabled = enabled,
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getProviderSelectorGroup(
+        prefs: exh.yakuyomi.TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        val enabled by prefs.enabled().collectAsState()
+        val provider by prefs.provider().collectAsState()
+        val isNomtl = eu.kanade.tachiyomi.BuildConfig.IS_NOMTL
+        var lastProvider by remember { mutableStateOf(provider) }
+        LaunchedEffect(provider) {
+            if (provider == "mangatranslator" && lastProvider != "mangatranslator" && !prefs.enabled().get()) {
+                prefs.enabled().set(true)
+            }
+            lastProvider = provider
+        }
+        return Preference.PreferenceGroup(
+            // KMK --> No header: it only repeated the "Provider" row's own title.
+            title = "",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = prefs.provider(),
+                    entries = if (isNomtl) {
+                        persistentMapOf(
+                            "mangatranslator" to "MangaTranslator (remote)",
+                        )
+                    } else {
+                        persistentMapOf(
+                            "openrouter" to "OpenRouter",
+                            "gemini" to "Gemini",
+                            "opencode_zen" to "OpenCode Zen",
+                            "nvidia_nim" to "NVIDIA NIM",
+                            "custom_openai" to "Custom OpenAI",
+                            "local" to "Local (On-device LLM)",
+                            "mangatranslator" to "MangaTranslator (remote)",
+                        )
+                    },
+                    title = stringResource(KMR.strings.pref_yakuyomi_provider),
+                    enabled = enabled,
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getHubNavGroup(
+        prefs: exh.yakuyomi.TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        val navigator = LocalNavigator.currentOrThrow
+        val provider by prefs.provider().collectAsState()
+        val apiKey by prefs.apiKeyForProvider(provider).collectAsState()
+        val nanoEnabled by prefs.geminiNanoEnabled().collectAsState()
+        val mtEmail by prefs.mangaTranslatorEmail().collectAsState()
+        val mtToken by prefs.mangaTranslatorAccessToken().collectAsState()
+        val cacheEnabled by prefs.cacheEnabled().collectAsState()
+        val offlineFallback by prefs.offlineFallback().collectAsState()
+        val autoSave by prefs.autoSaveWhileReading().collectAsState()
+        val localStatus by remember { globalAppGraph.localLlmDownloadManager.status }.collectAsState()
+        val mtlStatus by remember { globalAppGraph.modelManager.status }.collectAsState()
+
+        val providerLabel = providerDisplayName(provider)
+        val providerSubtitle = when (provider) {
+            "local" -> when (localStatus.state) {
+                exh.yakuyomi.LocalLlmDownloadManager.State.READY ->
+                    stringResource(KMR.strings.pref_yakuyomi_hub_provider_local_ready, providerLabel)
+                exh.yakuyomi.LocalLlmDownloadManager.State.DOWNLOADING ->
+                    stringResource(KMR.strings.pref_yakuyomi_hub_provider_local_downloading, providerLabel)
+                else -> stringResource(KMR.strings.pref_yakuyomi_hub_provider_local_missing, providerLabel)
+            }
+            "mangatranslator" -> if (mtToken.isNotBlank()) {
+                stringResource(
+                    KMR.strings.pref_yakuyomi_hub_provider_mt_active,
+                    providerLabel,
+                    mtEmail.ifBlank { stringResource(KMR.strings.pref_yakuyomi_hub_logged_in) },
+                )
+            } else {
+                stringResource(KMR.strings.pref_yakuyomi_hub_provider_mt_anonymous, providerLabel)
+            }
+            else -> if (apiKey.isBlank()) {
+                stringResource(KMR.strings.pref_yakuyomi_hub_provider_key_missing, providerLabel)
+            } else if (nanoEnabled) {
+                stringResource(KMR.strings.pref_yakuyomi_hub_provider_key_set_nano, providerLabel)
+            } else {
+                stringResource(KMR.strings.pref_yakuyomi_hub_provider_key_set, providerLabel)
+            }
+        }
+        val modelsSubtitle = when (mtlStatus.state) {
+            exh.yakuyomi.ModelManager.State.READY ->
+                stringResource(KMR.strings.pref_yakuyomi_hub_models_ready, localStatus.state.name.lowercase())
+            exh.yakuyomi.ModelManager.State.DOWNLOADING ->
+                stringResource(KMR.strings.pref_yakuyomi_hub_models_downloading)
+            else -> stringResource(KMR.strings.pref_yakuyomi_hub_models_missing, localStatus.state.name.lowercase())
+        }
+        val onText = stringResource(MR.strings.on)
+        val offText = stringResource(MR.strings.off)
+        val behaviorSubtitle = stringResource(
+            KMR.strings.pref_yakuyomi_hub_behavior_summary,
+            if (cacheEnabled) onText else offText,
+            if (offlineFallback) onText else offText,
+            if (autoSave) onText else offText,
+        )
+
+        return Preference.PreferenceGroup(
+            title = "",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_yakuyomi_provider_setup),
+                    subtitle = providerSubtitle,
+                    onClick = { navigator.push(SettingsYakuyomiProviderScreen) },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_yakuyomi_models_engine),
+                    subtitle = modelsSubtitle,
+                    onClick = { navigator.push(SettingsYakuyomiModelsScreen) },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_yakuyomi_behavior_title),
+                    subtitle = behaviorSubtitle,
+                    onClick = { navigator.push(SettingsYakuyomiBehaviorScreen) },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_yakuyomi_prompt_title),
+                    subtitle = stringResource(KMR.strings.pref_yakuyomi_prompt_info),
+                    onClick = { navigator.push(SettingsYakuyomiPromptScreen) },
+                ),
+            ),
+        )
+    }
+
+    private fun providerDisplayName(provider: String): String = when (provider) {
+        "openrouter" -> "OpenRouter"
+        "gemini" -> "Gemini"
+        "opencode_zen" -> "OpenCode Zen"
+        "nvidia_nim" -> "NVIDIA NIM"
+        "custom_openai" -> "Custom OpenAI"
+        "local" -> "Local"
+        "mangatranslator" -> "MangaTranslator"
+        else -> provider.ifBlank { "openrouter" }
+    }
+
+    @Composable
+    private fun getSessionsGroup(): Preference.PreferenceGroup {
+        val navigator = LocalNavigator.currentOrThrow
+        return Preference.PreferenceGroup(
+            title = "Sessions",
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = "Manage active translations",
+                    subtitle = "Kill / Pause / Resume / Retry per chapter",
+                    onClick = { navigator.push(SettingsTranslationSessionsScreen) },
+                ),
+            ),
+        )
+    }
+}
+
+// 6-digit (RRGGBB) or 8-digit (AARRGGBB) hex color, no '#'.
+private val HEX_COLOR_REGEX = Regex("^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
+
+private fun formatEta(seconds: Long): String = when {
+    seconds < 60 -> "${seconds}s"
+    seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
+    else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
+}

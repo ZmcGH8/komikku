@@ -1,0 +1,131 @@
+-- KMK -->
+-- Migration 55: exclude blacklisted chapters from libraryView chapter counts, so the
+-- library badge agrees with the (already filtered) chapter list on the details screen.
+DROP VIEW libraryView;
+
+CREATE VIEW libraryView AS
+SELECT
+    M.*,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.latestUpload, 0) AS latestUpload,
+    coalesce(C.fetchedAt, 0) AS chapterFetchedAt,
+    coalesce(C.lastRead, 0) AS lastRead,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    -- KMK -->
+    coalesce(C.bookmarkReadCount, 0) AS bookmarkedReadCount,
+    -- KMK <--
+    coalesce(MC.categories, '0') AS categories
+FROM mangas M
+LEFT JOIN (
+    SELECT
+        chapters.manga_id,
+        count(*) AS total,
+        sum(read) AS readCount,
+        coalesce(max(chapters.date_upload), 0) AS latestUpload,
+        coalesce(max(history.last_read), 0) AS lastRead,
+        coalesce(max(chapters.date_fetch), 0) AS fetchedAt,
+        sum(chapters.bookmark) AS bookmarkCount,
+        -- KMK -->
+        sum(CASE WHEN chapters.bookmark = 1 AND chapters.read = 1 THEN 1 ELSE 0 END) AS bookmarkReadCount,
+        -- KMK <--
+        excluded_scanlators.scanlator AS ex_scanlator
+    FROM chapters
+    LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+    LEFT JOIN history
+    ON chapters._id = history.chapter_id
+    -- KMK --> blacklisted chapters are hidden on the details screen, so they must not be
+    -- counted here either. Key format matches scanlatorBlacklistKey(): rounded number@scanlator.
+    LEFT JOIN mangas BM
+    ON BM._id = chapters.manga_id
+    -- KMK <--
+    WHERE ex_scanlator IS NULL
+    -- KMK -->
+    AND (
+        BM.blacklisted_chapters = ''
+        OR instr(
+            ', ' || BM.blacklisted_chapters || ', ',
+            ', ' || CAST(round(chapters.chapter_number * 100) / 100.0 AS TEXT)
+                || '@' || coalesce(chapters.scanlator, '') || ', '
+        ) = 0
+    )
+    -- KMK <--
+    GROUP BY chapters.manga_id
+) AS C
+ON M._id = C.manga_id
+LEFT JOIN (
+    SELECT manga_id, group_concat(category_id) AS categories
+    FROM mangas_categories
+    GROUP BY manga_id
+) AS MC
+ON MC.manga_id = M._id
+WHERE M.source <> 6969
+UNION
+SELECT
+    M.*,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.latestUpload, 0) AS latestUpload,
+    coalesce(C.fetchedAt, 0) AS chapterFetchedAt,
+    coalesce(C.lastRead, 0) AS lastRead,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    -- KMK -->
+    coalesce(C.bookmarkReadCount, 0) AS bookmarkedReadCount,
+    -- KMK <--
+    coalesce(MC.categories, '0') AS categories
+FROM mangas M
+LEFT JOIN (
+    SELECT merged.manga_id,merged.merge_id
+    FROM merged
+    GROUP BY merged.merge_id
+) AS ME
+ON ME.merge_id = M._id
+LEFT JOIN(
+    SELECT
+        ME.merge_id,
+        count(*) AS total,
+        sum(read) AS readCount,
+        coalesce(max(chapters.date_upload), 0) AS latestUpload,
+        coalesce(max(history.last_read), 0) AS lastRead,
+        coalesce(max(chapters.date_fetch), 0) AS fetchedAt,
+        sum(chapters.bookmark) AS bookmarkCount,
+        -- KMK -->
+        sum(CASE WHEN chapters.bookmark = 1 AND chapters.read = 1 THEN 1 ELSE 0 END) AS bookmarkReadCount,
+        -- KMK <--
+        excluded_scanlators.scanlator AS ex_scanlator
+    FROM chapters
+    LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+    LEFT JOIN history
+    ON chapters._id = history.chapter_id
+    LEFT JOIN merged ME
+    ON ME.manga_id = chapters.manga_id
+    -- KMK --> merged entries keep the blacklist on the parent, which is ME.merge_id
+    LEFT JOIN mangas BM
+    ON BM._id = ME.merge_id
+    -- KMK <--
+    WHERE ex_scanlator IS NULL
+    -- KMK -->
+    AND (
+        BM.blacklisted_chapters = ''
+        OR instr(
+            ', ' || BM.blacklisted_chapters || ', ',
+            ', ' || CAST(round(chapters.chapter_number * 100) / 100.0 AS TEXT)
+                || '@' || coalesce(chapters.scanlator, '') || ', '
+        ) = 0
+    )
+    -- KMK <--
+    GROUP BY ME.merge_id
+) AS C
+ON M._id = C.merge_id  -- ON ME.merge_id = C.merge_id
+LEFT JOIN (
+    SELECT manga_id, group_concat(category_id) AS categories
+    FROM mangas_categories
+    GROUP BY manga_id
+) AS MC
+ON MC.manga_id = M._id
+WHERE M.source = 6969;
+-- KMK <--

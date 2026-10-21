@@ -1,0 +1,591 @@
+package eu.kanade.presentation.reader.settings
+
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import eu.kanade.domain.manga.model.readerOrientation
+import eu.kanade.domain.manga.model.readingMode
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
+import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
+import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerConfig
+import eu.kanade.tachiyomi.ui.reader.viewer.webgpu.WebGpuViewer
+import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
+import exh.yakuyomi.DeviceMemory
+import mihon.app.di.globalAppGraph
+import tachiyomi.core.common.preference.toggle
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.i18n.sy.SYMR
+import tachiyomi.presentation.core.components.CheckboxItem
+import tachiyomi.presentation.core.components.HeadingItem
+import tachiyomi.presentation.core.components.SettingsChipRow
+import tachiyomi.presentation.core.components.SliderItem
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
+import java.text.NumberFormat
+
+@Composable
+internal fun ReadingModePage(screenModel: ReaderSettingsScreenModel) {
+    HeadingItem(MR.strings.pref_category_for_this_series)
+    val manga by screenModel.mangaFlow.collectAsState()
+
+    val readingMode = remember(manga) { ReadingMode.fromPreference(manga?.readingMode?.toInt()) }
+    SettingsChipRow(MR.strings.pref_category_reading_mode) {
+        ReadingMode.entries.map {
+            FilterChip(
+                selected = it == readingMode,
+                onClick = { screenModel.onChangeReadingMode(it) },
+                label = { Text(stringResource(it.stringRes)) },
+            )
+        }
+    }
+
+    val default = screenModel.preferences.defaultReadingMode().get()
+    val resolved = ReadingMode.fromPreference(
+        when {
+            readingMode == ReadingMode.DEFAULT -> default
+            else -> manga?.readingMode?.toInt() ?: default
+        },
+    )
+
+    // KMK --> Gap slider only affects the WebGPU continuous viewer (long strip keeps no gap).
+    if (resolved == ReadingMode.WEBTOON || resolved == ReadingMode.CONTINUOUS_VERTICAL) {
+        val numberFormat = remember { NumberFormat.getPercentInstance() }
+        val continuousMinWidth by screenModel.preferences.continuousMinWidth().collectAsState()
+        SliderItem(
+            value = continuousMinWidth,
+            valueRange = ReaderPreferences.let { 1..100 },
+            label = stringResource(MR.strings.pref_continuous_minwidth),
+            valueString = numberFormat.format(continuousMinWidth / 100f),
+            onChange = {
+                screenModel.preferences.continuousMinWidth().set(it)
+            },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+
+        if (resolved == ReadingMode.CONTINUOUS_VERTICAL) {
+            val continuousGap by screenModel.preferences.continuousGap().collectAsState()
+            SliderItem(
+                value = continuousGap,
+                valueRange = ReaderPreferences.let { 1..100 },
+                label = stringResource(MR.strings.pref_continuous_gap),
+                valueString = numberFormat.format(continuousGap / 100f),
+                onChange = {
+                    screenModel.preferences.continuousGap().set(it)
+                },
+                pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
+        }
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_webtoon_disable_zoom_out),
+            pref = screenModel.preferences.webtoonDisableZoomOut(),
+        )
+
+        // Stick scroll applies to both legacy webtoon and WebGPU continuous; keep it
+        // here (resolved mode) so HQ renderer does not hide it under WebGpuViewerSettings.
+        val controllerScrollSpeed by screenModel.preferences.controllerScrollSpeed().collectAsState()
+        SliderItem(
+            value = controllerScrollSpeed,
+            valueRange = ReaderPreferences.CONTROLLER_SCROLL_SPEED_MIN..ReaderPreferences.CONTROLLER_SCROLL_SPEED_MAX,
+            label = stringResource(KMR.strings.pref_controller_scroll_speed),
+            valueString = controllerScrollSpeed.toString(),
+            onChange = {
+                screenModel.preferences.controllerScrollSpeed().set(it)
+            },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+    }
+    // KMK <--
+
+    val orientation = remember(manga) { ReaderOrientation.fromPreference(manga?.readerOrientation?.toInt()) }
+    SettingsChipRow(MR.strings.rotation_type) {
+        ReaderOrientation.entries.map {
+            FilterChip(
+                selected = it == orientation,
+                onClick = { screenModel.onChangeOrientation(it) },
+                label = { Text(stringResource(it.stringRes)) },
+            )
+        }
+    }
+
+    val viewer by screenModel.viewerFlow.collectAsState()
+    // KMK --> Follow the configured renderer (HQ toggle + RAM gate), not just the live
+    // viewer instance: a re-entry that lands on the legacy fallback must not hide the
+    // WebGPU settings for the rest of the session. Prefs persist and apply on recovery.
+    val context = LocalContext.current
+    val hqRendererOn by globalAppGraph.basePreferences.highQualityRenderer().collectAsState()
+    val webGpuSupported = remember(context) { DeviceMemory.isWebGpuSupported(context) }
+    val webGpuConfigured = hqRendererOn && webGpuSupported
+    // KMK <--
+    if (viewer is WebtoonViewer && !webGpuConfigured) {
+        WebtoonViewerSettings(
+            screenModel,
+            // KMK -->
+            readingMode,
+            // KMK <--
+        )
+        // SY -->
+        WebtoonWithGapsViewerSettings(screenModel)
+        // SY <--
+    } else {
+        PagerViewerSettings(screenModel)
+        // Mihon -->
+        if (viewer is WebGpuViewer || webGpuConfigured) {
+            WebGpuViewerSettings(screenModel)
+        }
+        // Mihon <--
+    }
+}
+
+@Composable
+private fun PagerViewerSettings(screenModel: ReaderSettingsScreenModel) {
+    HeadingItem(MR.strings.pager_viewer)
+
+    val navigationModePager by screenModel.preferences.navigationModePager().collectAsState()
+    val pagerNavInverted by screenModel.preferences.pagerNavInverted().collectAsState()
+    TapZonesItems(
+        selected = navigationModePager,
+        onSelect = screenModel.preferences.navigationModePager()::set,
+        invertMode = pagerNavInverted,
+        onSelectInvertMode = screenModel.preferences.pagerNavInverted()::set,
+    )
+
+    val imageScaleType by screenModel.preferences.imageScaleType().collectAsState()
+    SettingsChipRow(MR.strings.pref_image_scale_type) {
+        ReaderPreferences.ImageScaleType.mapIndexed { index, it ->
+            FilterChip(
+                selected = imageScaleType == index + 1,
+                onClick = { screenModel.preferences.imageScaleType().set(index + 1) },
+                label = { Text(stringResource(it)) },
+            )
+        }
+    }
+
+    val zoomStart by screenModel.preferences.zoomStart().collectAsState()
+    SettingsChipRow(MR.strings.pref_zoom_start) {
+        ReaderPreferences.ZoomStart.mapIndexed { index, it ->
+            FilterChip(
+                selected = zoomStart == index + 1,
+                onClick = { screenModel.preferences.zoomStart().set(index + 1) },
+                label = { Text(stringResource(it)) },
+            )
+        }
+    }
+
+    // SY -->
+    val pageLayout by screenModel.preferences.pageLayout().collectAsState()
+    SettingsChipRow(SYMR.strings.page_layout) {
+        ReaderPreferences.PageLayouts.mapIndexed { index, it ->
+            FilterChip(
+                selected = pageLayout == index,
+                onClick = { screenModel.preferences.pageLayout().set(index) },
+                label = { Text(stringResource(it)) },
+            )
+        }
+    }
+    // SY <--
+
+    // KMK -->
+    CheckboxItem(
+        label = stringResource(KMR.strings.pref_viewer_nav_smaller_tap_zone),
+        pref = screenModel.preferences.smallerTapZone(),
+    )
+    // KMK <--
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_crop_borders),
+        pref = screenModel.preferences.cropBorders(),
+    )
+
+    // KMK -->
+    if (imageScaleType in ReaderPreferences.zoomWideImagesAllowedList) {
+        // KMK <--
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_landscape_zoom),
+            pref = screenModel.preferences.landscapeZoom(),
+        )
+    }
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_navigate_pan),
+        pref = screenModel.preferences.navigateToPan(),
+    )
+
+    val dualPageSplitPaged by screenModel.preferences.dualPageSplitPaged().collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_dual_page_split),
+        pref = screenModel.preferences.dualPageSplitPaged(),
+    )
+
+    // KMK --> Dual-page invert/rotate are pager-only: the WebGPU viewer never
+    // reads them, so hide them there instead of showing dead toggles. Split
+    // stays — it drives WebGPU spreads too.
+    val pagerSettingsViewer by screenModel.viewerFlow.collectAsState()
+    val showPagerDualPageExtras = pagerSettingsViewer !is WebGpuViewer
+    if (dualPageSplitPaged && showPagerDualPageExtras) {
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_dual_page_invert),
+            pref = screenModel.preferences.dualPageInvertPaged(),
+        )
+    }
+
+    val dualPageRotateToFit by screenModel.preferences.dualPageRotateToFit().collectAsState()
+    if (showPagerDualPageExtras) {
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_page_rotate),
+            pref = screenModel.preferences.dualPageRotateToFit(),
+        )
+
+        if (dualPageRotateToFit) {
+            CheckboxItem(
+                label = stringResource(MR.strings.pref_page_rotate_invert),
+                pref = screenModel.preferences.dualPageRotateToFitInvert(),
+            )
+        }
+    }
+    // KMK <--
+
+    // SY -->
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_page_transitions),
+        pref = screenModel.preferences.pageTransitionsPager(),
+    )
+
+    CheckboxItem(
+        label = stringResource(SYMR.strings.invert_double_pages),
+        pref = screenModel.preferences.invertDoublePages(),
+    )
+
+    // KMK -->
+    CheckboxItem(
+        label = stringResource(KMR.strings.pref_paged_disable_zoom_in),
+        pref = screenModel.preferences.pagedDisableZoomIn(),
+    )
+    val pagedDisableZoomIn by screenModel.preferences.pagedDisableZoomIn().collectAsState()
+    if (!pagedDisableZoomIn) {
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_double_tap_zoom),
+            pref = screenModel.preferences.pagedDoubleTapZoomEnabled(),
+        )
+    }
+    // KMK <--
+
+    val centerMarginType by screenModel.preferences.centerMarginType().collectAsState()
+    SettingsChipRow(SYMR.strings.pref_center_margin) {
+        ReaderPreferences.CenterMarginTypes.mapIndexed { index, it ->
+            FilterChip(
+                selected = centerMarginType == index,
+                onClick = { screenModel.preferences.centerMarginType().set(index) },
+                label = { Text(stringResource(it)) },
+            )
+        }
+    }
+    // SY <--
+}
+
+@Composable
+private fun WebtoonViewerSettings(
+    screenModel: ReaderSettingsScreenModel,
+    // KMK -->
+    readingMode: ReadingMode,
+    // KMK <--
+) {
+    val numberFormat = remember { NumberFormat.getPercentInstance() }
+
+    HeadingItem(MR.strings.webtoon_viewer)
+
+    val navigationModeWebtoon by screenModel.preferences.navigationModeWebtoon().collectAsState()
+    val webtoonNavInverted by screenModel.preferences.webtoonNavInverted().collectAsState()
+    TapZonesItems(
+        selected = navigationModeWebtoon,
+        onSelect = screenModel.preferences.navigationModeWebtoon()::set,
+        invertMode = webtoonNavInverted,
+        onSelectInvertMode = screenModel.preferences.webtoonNavInverted()::set,
+    )
+
+    // KMK -->
+    val webtoonScaleTypePref = screenModel.preferences.webtoonScaleType()
+    val webtoonScaleType by webtoonScaleTypePref.collectAsState()
+    val webtoonSmartScaleLongStripGap = screenModel.preferences.longStripGapSmartScale().get()
+    if (readingMode != ReadingMode.CONTINUOUS_VERTICAL || webtoonSmartScaleLongStripGap) {
+        SettingsChipRow(KMR.strings.pref_webtoon_scale_type) {
+            ReaderPreferences.WebtoonScaleType.entries.forEach { scaleType ->
+                FilterChip(
+                    selected = webtoonScaleType == scaleType,
+                    onClick = { webtoonScaleTypePref.set(scaleType) },
+                    label = { Text(stringResource(scaleType.titleRes)) },
+                )
+            }
+        }
+    }
+    // KMK <--
+
+    val webtoonSidePadding by screenModel.preferences.webtoonSidePadding().collectAsState()
+    SliderItem(
+        value = webtoonSidePadding,
+        valueRange = ReaderPreferences.let { it.WEBTOON_PADDING_MIN..it.WEBTOON_PADDING_MAX },
+        label = stringResource(MR.strings.pref_webtoon_side_padding),
+        valueString = numberFormat.format(webtoonSidePadding / 100f),
+        onChange = {
+            screenModel.preferences.webtoonSidePadding().set(it)
+        },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    // KMK -->
+    CheckboxItem(
+        label = stringResource(KMR.strings.pref_viewer_nav_smaller_tap_zone),
+        pref = screenModel.preferences.smallerTapZone(),
+    )
+    // KMK <--
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_crop_borders),
+        pref = screenModel.preferences.cropBordersWebtoon(),
+    )
+
+    // SY -->
+    CheckboxItem(
+        label = stringResource(SYMR.strings.pref_smooth_scroll),
+        pref = screenModel.preferences.smoothAutoScroll(),
+    )
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_page_transitions),
+        pref = screenModel.preferences.pageTransitionsWebtoon(),
+    )
+    // SY <--
+
+    val dualPageSplitWebtoon by screenModel.preferences.dualPageSplitWebtoon().collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_dual_page_split),
+        pref = screenModel.preferences.dualPageSplitWebtoon(),
+    )
+
+    if (dualPageSplitWebtoon) {
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_dual_page_invert),
+            pref = screenModel.preferences.dualPageInvertWebtoon(),
+        )
+    }
+
+    val dualPageRotateToFitWebtoon by screenModel.preferences.dualPageRotateToFitWebtoon().collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_page_rotate),
+        pref = screenModel.preferences.dualPageRotateToFitWebtoon(),
+    )
+
+    if (dualPageRotateToFitWebtoon) {
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_page_rotate_invert),
+            pref = screenModel.preferences.dualPageRotateToFitInvertWebtoon(),
+        )
+    }
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_double_tap_zoom),
+        pref = screenModel.preferences.webtoonDoubleTapZoomEnabled(),
+    )
+    // KMK -->
+    CheckboxItem(
+        label = stringResource(KMR.strings.pref_pinch_to_zoom),
+        pref = screenModel.preferences.webtoonPinchToZoomEnabled(),
+    )
+    // KMK <--
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_webtoon_disable_zoom_out),
+        pref = screenModel.preferences.webtoonDisableZoomOut(),
+    )
+}
+
+// SY -->
+@Composable
+private fun WebtoonWithGapsViewerSettings(screenModel: ReaderSettingsScreenModel) {
+    HeadingItem(MR.strings.vertical_plus_viewer)
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_crop_borders),
+        pref = screenModel.preferences.cropBordersContinuousVertical(),
+    )
+}
+// SY <--
+
+// Mihon -->
+@Composable
+private fun WebGpuViewerSettings(screenModel: ReaderSettingsScreenModel) {
+    HeadingItem(MR.strings.webgpu_viewer)
+
+    val viewer by screenModel.viewerFlow.collectAsState()
+
+    // KMK -->
+    val webgpuPageOffset by screenModel.preferences.webgpuPageOffset().collectAsState()
+    SliderItem(
+        value = webgpuPageOffset,
+        valueRange = ReaderPreferences.WEBGPU_PAGE_OFFSET_MIN..ReaderPreferences.WEBGPU_PAGE_OFFSET_MAX,
+        label = stringResource(KMR.strings.pref_webgpu_page_offset),
+        valueString = "$webgpuPageOffset%",
+        onChange = { screenModel.preferences.webgpuPageOffset().set(it) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+    // KMK <--
+
+    // KMK -->
+    val webgpuDarkMode by screenModel.preferences.webgpuDarkMode().collectAsState()
+    CheckboxItem(
+        label = stringResource(KMR.strings.pref_webgpu_dark_mode),
+        pref = screenModel.preferences.webgpuDarkMode(),
+    )
+    val webgpuDarkModeAmoled by screenModel.preferences.webgpuDarkModeAmoled().collectAsState()
+    Box(modifier = Modifier.alpha(if (webgpuDarkMode) 1f else 0.38f)) {
+        CheckboxItem(
+            label = stringResource(KMR.strings.pref_webgpu_dark_mode_amoled),
+            checked = webgpuDarkModeAmoled,
+            onClick = { if (webgpuDarkMode) screenModel.preferences.webgpuDarkModeAmoled().toggle() },
+        )
+    }
+    if (webgpuDarkMode) {
+        val darkModeTolerance by screenModel.preferences.webgpuDarkModeTolerance().collectAsState()
+        SliderItem(
+            value = darkModeTolerance,
+            valueRange = ReaderPreferences.WEBGPU_DARK_MODE_TOLERANCE_MIN..ReaderPreferences.WEBGPU_DARK_MODE_TOLERANCE_MAX,
+            label = stringResource(KMR.strings.pref_webgpu_dark_mode_tolerance),
+            valueString = "%.2f".format(darkModeTolerance / 100f),
+            onChange = { screenModel.preferences.webgpuDarkModeTolerance().set(it) },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+        val darkModeChunkRange by screenModel.preferences.webgpuDarkModeChunkRange().collectAsState()
+        SliderItem(
+            value = darkModeChunkRange,
+            valueRange = ReaderPreferences.WEBGPU_DARK_MODE_CHUNK_RANGE_MIN..ReaderPreferences.WEBGPU_DARK_MODE_CHUNK_RANGE_MAX,
+            label = stringResource(KMR.strings.pref_webgpu_dark_mode_chunk_range),
+            valueString = "%.2f".format(darkModeChunkRange / 100f),
+            onChange = { screenModel.preferences.webgpuDarkModeChunkRange().set(it) },
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+    }
+    // KMK <--
+
+    // KMK --> Hide rows that do nothing in the continuous modes.
+    val webgpuManga by screenModel.mangaFlow.collectAsState()
+    val webgpuReadingMode = remember(webgpuManga) { ReadingMode.fromPreference(webgpuManga?.readingMode?.toInt()) }
+    val webgpuDefault = screenModel.preferences.defaultReadingMode().get()
+    val webgpuResolved = ReadingMode.fromPreference(
+        when {
+            webgpuReadingMode == ReadingMode.DEFAULT -> webgpuDefault
+            else -> webgpuManga?.readingMode?.toInt() ?: webgpuDefault
+        },
+    )
+    // KMK <--
+
+    // KMK --> Derived from prefs (not the viewer instance) so the single/dual rows
+    // swap immediately when the layout switch or split toggle changes. Mirrors
+    // WebGpuViewer.isDualPageMode.
+    val dualSplitEnabled by screenModel.preferences.dualPageSplitPaged().collectAsState()
+    val pageLayoutMode by screenModel.preferences.pageLayout().collectAsState()
+    val isDual = (viewer as? WebGpuViewer)?.isContinuous == false &&
+        (
+            dualSplitEnabled ||
+                pageLayoutMode == PagerConfig.PageLayout.DOUBLE_PAGES ||
+                (
+                    pageLayoutMode == PagerConfig.PageLayout.AUTOMATIC &&
+                        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    )
+            )
+    // KMK <--
+
+    if (isDual) {
+        val transitionAnimationDual by screenModel.preferences.transitionAnimationDual().collectAsState()
+        SettingsChipRow(MR.strings.pref_transition_animation_dual) {
+            (
+                ReaderPreferences.TransitionAnimation.entries - ReaderPreferences.TransitionAnimation.FLIP_LEFT -
+                    ReaderPreferences.TransitionAnimation.FLIP_RIGHT
+                ).forEach {
+                FilterChip(
+                    selected = it == transitionAnimationDual,
+                    onClick = { screenModel.preferences.transitionAnimationDual().set(it) },
+                    label = { Text(stringResource(it.titleRes)) },
+                )
+            }
+        }
+        val cutoutModeDual by screenModel.preferences.cutoutModeDual().collectAsState()
+        SettingsChipRow(MR.strings.pref_cutout_mode_dual) {
+            ReaderPreferences.CutoutMode.entries.forEach {
+                FilterChip(
+                    selected = it == cutoutModeDual,
+                    onClick = { screenModel.preferences.cutoutModeDual().set(it) },
+                    label = { Text(stringResource(it.titleRes)) },
+                )
+            }
+        }
+        return
+    }
+
+    // KMK -->
+    if (webgpuResolved != ReadingMode.WEBTOON && webgpuResolved != ReadingMode.CONTINUOUS_VERTICAL) {
+        val transitionAnimation by screenModel.preferences.transitionAnimation().collectAsState()
+        SettingsChipRow(MR.strings.pref_transition_animation) {
+            ReaderPreferences.TransitionAnimation.entries.map {
+                FilterChip(
+                    selected = it == transitionAnimation,
+                    onClick = { screenModel.preferences.transitionAnimation().set(it) },
+                    label = { Text(stringResource(it.titleRes)) },
+                )
+            }
+        }
+
+        val cutoutMode by screenModel.preferences.cutoutMode().collectAsState()
+        SettingsChipRow(MR.strings.pref_cutout_mode) {
+            ReaderPreferences.CutoutMode.entries.map {
+                FilterChip(
+                    selected = it == cutoutMode,
+                    onClick = { screenModel.preferences.cutoutMode().set(it) },
+                    label = { Text(stringResource(it.titleRes)) },
+                )
+            }
+        }
+    }
+    // KMK <--
+}
+// Mihon <--
+
+@Composable
+private fun TapZonesItems(
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    invertMode: ReaderPreferences.TappingInvertMode,
+    onSelectInvertMode: (ReaderPreferences.TappingInvertMode) -> Unit,
+) {
+    SettingsChipRow(MR.strings.pref_viewer_nav) {
+        ReaderPreferences.TapZones.mapIndexed { index, it ->
+            FilterChip(
+                selected = selected == index,
+                onClick = { onSelect(index) },
+                label = { Text(stringResource(it)) },
+            )
+        }
+    }
+
+    if (selected != 5) {
+        SettingsChipRow(MR.strings.pref_read_with_tapping_inverted) {
+            ReaderPreferences.TappingInvertMode.entries.map {
+                FilterChip(
+                    selected = it == invertMode,
+                    onClick = { onSelectInvertMode(it) },
+                    label = { Text(stringResource(it.titleRes)) },
+                )
+            }
+        }
+    }
+}

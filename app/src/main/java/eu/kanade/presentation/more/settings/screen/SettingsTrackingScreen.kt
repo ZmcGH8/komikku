@@ -1,0 +1,423 @@
+package eu.kanade.presentation.more.settings.screen
+
+import android.content.Context
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.tachiyomi.data.track.EnhancedTracker
+import eu.kanade.tachiyomi.data.track.Tracker
+import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.util.system.openInBrowser
+import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toPersistentMap
+import mihon.app.di.globalAppGraph
+import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.i18n.sy.SYMR
+import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
+
+object SettingsTrackingScreen : SearchableSettings {
+    @Suppress("unused")
+    private fun readResolve(): Any = SettingsTrackingScreen
+
+    @ReadOnlyComposable
+    @Composable
+    override fun getTitleRes() = MR.strings.pref_category_tracking
+
+    @Composable
+    override fun RowScope.AppBarAction() {
+        val uriHandler = LocalUriHandler.current
+        IconButton(onClick = { uriHandler.openUri("https://komikku-app.github.io/docs/guides/tracking") }) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                contentDescription = stringResource(MR.strings.tracking_guide),
+            )
+        }
+    }
+
+    @Composable
+    override fun getPreferences(): List<Preference> {
+        val context = LocalContext.current
+        val trackPreferences = remember { globalAppGraph.trackPreferences }
+        val trackerManager = remember { globalAppGraph.trackerManager }
+        val sourceManager = remember { globalAppGraph.sourceManager }
+        // KMK --> appwide priority tracker: star set by long-press below.
+        val priorityTrackerId by trackPreferences.priorityTrackerId().collectAsState()
+        // KMK <--
+
+        var dialog by remember { mutableStateOf<Any?>(null) }
+        dialog?.run {
+            when (this) {
+                is LoginDialog -> {
+                    TrackingLoginDialog(
+                        tracker = tracker,
+                        uNameStringRes = uNameStringRes,
+                        onDismissRequest = { dialog = null },
+                    )
+                }
+                is LogoutDialog -> {
+                    TrackingLogoutDialog(
+                        tracker = tracker,
+                        onDismissRequest = { dialog = null },
+                    )
+                }
+            }
+        }
+
+        val enhancedTrackers = trackerManager.trackers
+            .filter { it is EnhancedTracker }
+            .partition { service ->
+                val acceptedSources = (service as EnhancedTracker).getAcceptedSources()
+                sourceManager.getAll().any { it::class.qualifiedName in acceptedSources }
+            }
+        var enhancedTrackerInfo = stringResource(MR.strings.enhanced_tracking_info)
+        if (enhancedTrackers.second.isNotEmpty()) {
+            val missingSourcesInfo = stringResource(
+                MR.strings.enhanced_services_not_installed,
+                enhancedTrackers.second.joinToString { it.name },
+            )
+            enhancedTrackerInfo += "\n\n$missingSourcesInfo"
+        }
+
+        return listOf(
+            Preference.PreferenceItem.SwitchPreference(
+                preference = trackPreferences.trackOnAddingToLibrary(),
+                title = stringResource(KMR.strings.pref_track_on_add_library),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = trackPreferences.autoUpdateTrack(),
+                title = stringResource(MR.strings.pref_auto_update_manga_sync),
+            ),
+            Preference.PreferenceItem.ListPreference(
+                preference = trackPreferences.autoUpdateTrackOnMarkRead(),
+                entries = AutoTrackState.entries
+                    .associateWith { stringResource(it.titleRes) }
+                    .toPersistentMap(),
+                title = stringResource(MR.strings.pref_auto_update_manga_on_mark_read),
+            ),
+            // KMK -->
+            Preference.PreferenceItem.SwitchPreference(
+                preference = trackPreferences.autoSyncProgressFromTrackers(),
+                title = stringResource(KMR.strings.pref_auto_sync_progress_from_trackers),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = trackPreferences.deleteTrackRecordsOnLogout(),
+                title = stringResource(KMR.strings.pref_delete_track_records_on_logout),
+                subtitle = stringResource(KMR.strings.pref_delete_track_records_on_logout_summary),
+            ),
+            // KMK <--
+            // SY -->
+            Preference.PreferenceItem.SwitchPreference(
+                preference = trackPreferences.resolveUsingSourceMetadata(),
+                title = stringResource(SYMR.strings.pref_tracker_resolve_using_source_metadata),
+                subtitle = stringResource(SYMR.strings.pref_tracker_resolve_using_source_metadata_summary),
+            ),
+            // SY <--
+            Preference.PreferenceGroup(
+                title = stringResource(MR.strings.services),
+                preferenceItems = (
+                    trackerManager.trackers
+                        .filter { it.getLoginMode() != eu.kanade.tachiyomi.data.track.core.TrackerLoginMode.ENHANCED_NOOP }
+                        .filter { it.id != eu.kanade.tachiyomi.data.track.core.TrackerId.MDLIST }
+                        .map { tracker ->
+                            Preference.PreferenceItem.TrackerPreference(
+                                tracker = tracker,
+                                login = {
+                                    when (tracker.getLoginMode()) {
+                                        eu.kanade.tachiyomi.data.track.core.TrackerLoginMode.OAUTH -> {
+                                            tracker.getAuthUrl()?.let { url ->
+                                                context.openInBrowser(url.toUri(), forceDefaultBrowser = true)
+                                            }
+                                        }
+                                        eu.kanade.tachiyomi.data.track.core.TrackerLoginMode.CREDENTIALS -> {
+                                            dialog = LoginDialog(tracker, tracker.getUsernameLabel())
+                                        }
+                                        eu.kanade.tachiyomi.data.track.core.TrackerLoginMode.WEBVIEW_COOKIE -> {
+                                            tracker.createCookieLoginIntent(context)?.let { intent ->
+                                                context.startActivity(intent)
+                                            }
+                                        }
+                                        eu.kanade.tachiyomi.data.track.core.TrackerLoginMode.ENHANCED_NOOP -> Unit
+                                    }
+                                },
+                                logout = { dialog = LogoutDialog(tracker) },
+                                // KMK --> long-press a logged-in tracker to star it as priority.
+                                isPriority = tracker.id == priorityTrackerId,
+                                onLongClick = {
+                                    trackPreferences.setPriorityTrackerId(
+                                        if (tracker.id == priorityTrackerId) null else tracker.id,
+                                    )
+                                },
+                                // KMK <--
+                            )
+                        } + listOf(Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.tracking_info)))
+                    ).toImmutableList(),
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(MR.strings.enhanced_services),
+                preferenceItems = (
+                    enhancedTrackers.first
+                        .map { service ->
+                            Preference.PreferenceItem.TrackerPreference(
+                                tracker = service,
+                                login = { (service as EnhancedTracker).loginNoop() },
+                                logout = service::logout,
+                                // KMK --> same priority star as the services group above.
+                                isPriority = service.id == priorityTrackerId,
+                                onLongClick = {
+                                    trackPreferences.setPriorityTrackerId(
+                                        if (service.id == priorityTrackerId) null else service.id,
+                                    )
+                                },
+                                // KMK <--
+                            )
+                        } + listOf(Preference.PreferenceItem.InfoPreference(enhancedTrackerInfo))
+                    ).toImmutableList(),
+            ),
+        )
+    }
+
+    @Composable
+    private fun TrackingLoginDialog(
+        tracker: Tracker,
+        uNameStringRes: StringResource,
+        onDismissRequest: () -> Unit,
+    ) {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+
+        var username by remember { mutableStateOf(TextFieldValue(tracker.getUsername())) }
+        var password by remember { mutableStateOf(TextFieldValue(tracker.getPassword())) }
+        var processing by remember { mutableStateOf(false) }
+        var inputError by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(MR.strings.login_title, tracker.name),
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismissRequest) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = stringResource(MR.strings.action_close),
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentType = ContentType.Username + ContentType.EmailAddress },
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text(text = stringResource(uNameStringRes)) },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        singleLine = true,
+                        isError = inputError && !processing,
+                    )
+
+                    var hidePassword by remember { mutableStateOf(true) }
+                    OutlinedTextField(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentType = ContentType.Password },
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text(text = stringResource(MR.strings.password)) },
+                        trailingIcon = {
+                            IconButton(onClick = { hidePassword = !hidePassword }) {
+                                Icon(
+                                    imageVector = if (hidePassword) {
+                                        Icons.Filled.Visibility
+                                    } else {
+                                        Icons.Filled.VisibilityOff
+                                    },
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                        visualTransformation = if (hidePassword) {
+                            PasswordVisualTransformation()
+                        } else {
+                            VisualTransformation.None
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done,
+                        ),
+                        singleLine = true,
+                        isError = inputError && !processing,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !processing && username.text.isNotBlank() && password.text.isNotBlank(),
+                    onClick = {
+                        scope.launchIO {
+                            processing = true
+                            val result = checkLogin(
+                                context = context,
+                                tracker = tracker,
+                                username = username.text,
+                                password = password.text,
+                            )
+                            inputError = !result
+                            if (result) onDismissRequest()
+                            processing = false
+                        }
+                    },
+                ) {
+                    val id = if (processing) MR.strings.logging_in else MR.strings.login
+                    Text(text = stringResource(id))
+                }
+            },
+        )
+    }
+
+    private suspend fun checkLogin(
+        context: Context,
+        tracker: Tracker,
+        username: String,
+        password: String,
+    ): Boolean {
+        return try {
+            tracker.login(username, password)
+            withUIContext { context.toast(MR.strings.login_success) }
+            true
+        } catch (e: Throwable) {
+            tracker.logout()
+            withUIContext { context.toast(e.message.toString()) }
+            false
+        }
+    }
+
+    @Composable
+    private fun TrackingLogoutDialog(
+        tracker: Tracker,
+        onDismissRequest: () -> Unit,
+    ) {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            title = {
+                Text(
+                    text = stringResource(MR.strings.logout_title, tracker.name),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall)) {
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        onClick = onDismissRequest,
+                    ) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                    Button(
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            tracker.logout()
+                            // KMK --> Signing out has to take the tracker's local record with it.
+                            // `logout()` only drops the credentials, so every score and status the
+                            // service had written stayed in `manga_sync` and came straight back on the
+                            // next login — a signed-out account that still looked fully tracked.
+                            // Opt-in: the wipe runs only when the tracking-settings toggle is on,
+                            // read at click time so a just-flipped switch takes effect without a
+                            // screen reload. Ordered after the logout so the credential state is
+                            // already settled whether or not the delete succeeds, and off the main
+                            // thread because it is one statement per tracked entry on a large library.
+                            if (globalAppGraph.trackPreferences.deleteTrackRecordsOnLogout().get()) {
+                                scope.launchIO {
+                                    // `try`/`catch`, not `runCatching`: its block is not a suspend
+                                    // lambda, so wrapping the delete in it does not compile.
+                                    try {
+                                        globalAppGraph.trackRepository.deleteAllByTrackerId(tracker.id)
+                                    } catch (e: Exception) {
+                                        withUIContext { context.toast(e.message.toString()) }
+                                    }
+                                }
+                            }
+                            // KMK <--
+                            onDismissRequest()
+                            context.toast(MR.strings.logout_success)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
+                    ) {
+                        Text(text = stringResource(MR.strings.logout))
+                    }
+                }
+            },
+        )
+    }
+}
+
+private data class LoginDialog(
+    val tracker: Tracker,
+    val uNameStringRes: StringResource,
+)
+
+private data class LogoutDialog(
+    val tracker: Tracker,
+)

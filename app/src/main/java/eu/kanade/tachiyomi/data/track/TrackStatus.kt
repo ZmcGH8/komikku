@@ -1,0 +1,182 @@
+package eu.kanade.tachiyomi.data.track
+
+import dev.icerock.moko.resources.StringResource
+import eu.kanade.tachiyomi.data.track.anilist.Anilist
+import eu.kanade.tachiyomi.data.track.animeplanet.AnimePlanet
+import eu.kanade.tachiyomi.data.track.bangumi.Bangumi
+import eu.kanade.tachiyomi.data.track.comick.ComicK
+import eu.kanade.tachiyomi.data.track.core.TrackerId
+import eu.kanade.tachiyomi.data.track.hikka.Hikka
+import eu.kanade.tachiyomi.data.track.kavita.Kavita
+import eu.kanade.tachiyomi.data.track.kitsu.Kitsu
+import eu.kanade.tachiyomi.data.track.komga.Komga
+import eu.kanade.tachiyomi.data.track.mangabaka.MangaBaka
+import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates
+import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeList
+import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
+import eu.kanade.tachiyomi.data.track.suwayomi.Suwayomi
+import exh.md.utils.FollowStatus
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.sy.SYMR
+
+enum class TrackStatus(val int: Int, val res: StringResource) {
+    READING(1, MR.strings.reading),
+    REPEATING(2, MR.strings.repeating),
+    PLAN_TO_READ(3, MR.strings.plan_to_read),
+    PAUSED(4, MR.strings.on_hold),
+    COMPLETED(5, MR.strings.completed),
+    DROPPED(6, MR.strings.dropped),
+    OTHER(7, SYMR.strings.not_tracked),
+    ;
+
+    companion object {
+        fun parseTrackerStatus(trackerManager: TrackerManager, tracker: Long, status: Long): TrackStatus? {
+            // Framework: prefer TrackerId constants; fall back to manager fields for legacy call sites.
+            // This switch is now exhaustive for all 14 built-in trackers (+1 MDLIST).
+            return when (tracker) {
+                TrackerId.MDLIST, trackerManager.mdList.id -> {
+                    when (FollowStatus.fromLong(status)) {
+                        FollowStatus.UNFOLLOWED -> null
+                        FollowStatus.READING -> READING
+                        FollowStatus.COMPLETED -> COMPLETED
+                        FollowStatus.ON_HOLD -> PAUSED
+                        FollowStatus.PLAN_TO_READ -> PLAN_TO_READ
+                        FollowStatus.DROPPED -> DROPPED
+                        FollowStatus.RE_READING -> REPEATING
+                    }
+                }
+                TrackerId.MYANIMELIST, trackerManager.myAnimeList.id -> {
+                    when (status) {
+                        MyAnimeList.READING -> READING
+                        MyAnimeList.COMPLETED -> COMPLETED
+                        MyAnimeList.ON_HOLD -> PAUSED
+                        MyAnimeList.PLAN_TO_READ -> PLAN_TO_READ
+                        MyAnimeList.DROPPED -> DROPPED
+                        MyAnimeList.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                TrackerId.ANILIST, trackerManager.aniList.id -> {
+                    when (status) {
+                        Anilist.READING -> READING
+                        Anilist.COMPLETED -> COMPLETED
+                        Anilist.ON_HOLD -> PAUSED
+                        Anilist.PLAN_TO_READ -> PLAN_TO_READ
+                        Anilist.DROPPED -> DROPPED
+                        Anilist.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                TrackerId.KITSU, trackerManager.kitsu.id -> {
+                    when (status) {
+                        Kitsu.READING -> READING
+                        Kitsu.COMPLETED -> COMPLETED
+                        Kitsu.ON_HOLD -> PAUSED
+                        Kitsu.PLAN_TO_READ -> PLAN_TO_READ
+                        Kitsu.DROPPED -> DROPPED
+                        Kitsu.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                TrackerId.SHIKIMORI, trackerManager.shikimori.id -> {
+                    when (status) {
+                        Shikimori.READING -> READING
+                        Shikimori.COMPLETED -> COMPLETED
+                        Shikimori.ON_HOLD -> PAUSED
+                        Shikimori.PLAN_TO_READ -> PLAN_TO_READ
+                        Shikimori.DROPPED -> DROPPED
+                        Shikimori.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                TrackerId.BANGUMI, trackerManager.bangumi.id -> {
+                    when (status) {
+                        Bangumi.READING -> READING
+                        Bangumi.COMPLETED -> COMPLETED
+                        Bangumi.ON_HOLD -> PAUSED
+                        Bangumi.PLAN_TO_READ -> PLAN_TO_READ
+                        Bangumi.DROPPED -> DROPPED
+                        else -> READING
+                    }
+                }
+                TrackerId.KOMGA, trackerManager.komga.id -> {
+                    when (status) {
+                        Komga.READING -> READING
+                        Komga.COMPLETED -> COMPLETED
+                        Komga.UNREAD -> null
+                        else -> null
+                    }
+                }
+                TrackerId.MANGA_UPDATES, trackerManager.mangaUpdates.id -> {
+                    when (status) {
+                        MangaUpdates.READING_LIST -> READING
+                        MangaUpdates.COMPLETE_LIST -> COMPLETED
+                        MangaUpdates.ON_HOLD_LIST -> PAUSED
+                        MangaUpdates.WISH_LIST -> PLAN_TO_READ
+                        MangaUpdates.UNFINISHED_LIST -> DROPPED
+                        else -> null
+                    }
+                }
+                TrackerId.MANGABAKA, trackerManager.mangaBaka.id -> {
+                    when (status) {
+                        MangaBaka.READING -> READING
+                        MangaBaka.COMPLETED -> COMPLETED
+                        MangaBaka.PAUSED -> PAUSED
+                        MangaBaka.DROPPED -> DROPPED
+                        MangaBaka.PLAN_TO_READ -> PLAN_TO_READ
+                        MangaBaka.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                TrackerId.ANIMEPLANET, trackerManager.animePlanet.id -> {
+                    when (status) {
+                        AnimePlanet.READING -> READING
+                        AnimePlanet.COMPLETED -> COMPLETED
+                        AnimePlanet.ON_HOLD -> PAUSED
+                        AnimePlanet.PLAN_TO_READ -> PLAN_TO_READ
+                        AnimePlanet.DROPPED -> DROPPED
+                        AnimePlanet.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                TrackerId.HIKKA, trackerManager.hikka.id -> {
+                    when (status) {
+                        Hikka.READING -> READING
+                        Hikka.COMPLETED -> COMPLETED
+                        Hikka.ON_HOLD -> PAUSED
+                        Hikka.PLAN_TO_READ -> PLAN_TO_READ
+                        Hikka.DROPPED -> DROPPED
+                        Hikka.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                TrackerId.COMICK, trackerManager.comicK.id -> {
+                    when (status) {
+                        ComicK.READING -> READING
+                        ComicK.COMPLETED -> COMPLETED
+                        ComicK.ON_HOLD -> PAUSED
+                        ComicK.PLAN_TO_READ -> PLAN_TO_READ
+                        ComicK.DROPPED -> DROPPED
+                        else -> null
+                    }
+                }
+                // Enhanced trackers (Kavita, Suwayomi) reuse same 2-state read/completed model as Komga
+                TrackerId.KAVITA, trackerManager.kavita.id -> {
+                    when (status) {
+                        Kavita.READING -> READING
+                        Kavita.COMPLETED -> COMPLETED
+                        else -> null
+                    }
+                }
+                TrackerId.SUWAYOMI, trackerManager.suwayomi.id -> {
+                    when (status) {
+                        Suwayomi.READING -> READING
+                        Suwayomi.COMPLETED -> COMPLETED
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+        }
+    }
+}

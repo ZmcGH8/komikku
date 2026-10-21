@@ -1,0 +1,818 @@
+package eu.kanade.presentation.track
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.unit.dp
+import dev.icerock.moko.resources.StringResource
+import eu.kanade.presentation.components.DropdownMenu
+import eu.kanade.presentation.theme.TachiyomiPreviewTheme
+import eu.kanade.presentation.track.components.TrackLogoIcon
+import eu.kanade.presentation.util.isTabletUi
+import eu.kanade.tachiyomi.data.track.EnhancedTracker
+import eu.kanade.tachiyomi.data.track.Tracker
+import eu.kanade.tachiyomi.ui.manga.track.TrackItem
+import eu.kanade.tachiyomi.util.lang.toLocalDate
+import mihon.app.di.globalAppGraph
+import tachiyomi.domain.track.service.TrackerProgressSync
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.presentation.core.i18n.stringResource
+import java.time.format.DateTimeFormatter
+import kotlin.math.abs
+
+@Composable
+fun TrackInfoDialogHome(
+    trackItems: List<TrackItem>,
+    seriesTitle: String,
+    dateFormat: DateTimeFormatter,
+    onStatusClick: (TrackItem) -> Unit,
+    onChapterClick: (TrackItem) -> Unit,
+    onScoreClick: (TrackItem) -> Unit,
+    onStartDateEdit: (TrackItem) -> Unit,
+    onEndDateEdit: (TrackItem) -> Unit,
+    onNewSearch: (TrackItem) -> Unit,
+    onOpenInBrowser: (TrackItem) -> Unit,
+    onRemoved: (TrackItem) -> Unit,
+    onRemoveAll: (List<TrackItem>) -> Unit = {},
+    onCopyLink: (TrackItem) -> Unit,
+    onTogglePrivate: (TrackItem) -> Unit,
+    // KMK -->
+    onStepChapter: (Int) -> Unit = {},
+    onManageServices: () -> Unit = {},
+    // KMK <--
+    errorTrackerIds: Set<Long> = emptySet(),
+) {
+    val isTablet = isTabletUi()
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = if (isTablet) Alignment.Center else Alignment.TopStart,
+    ) {
+        Column(
+            // KMK --> bounded + scrollable: heightIn must cap the scroll container directly.
+            // No animateContentSize/wrapContentHeight here: they remeasure the scroll child
+            // unbounded and defeat the max-height cap, letting the sheet grow full-length.
+            modifier = Modifier
+                .then(if (isTablet) Modifier.widthIn(max = 560.dp) else Modifier.fillMaxWidth())
+                .heightIn(max = 400.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            // KMK <--
+        ) {
+            // KMK -->
+            val scoredTracks = trackItems
+                .mapNotNull { item -> item.track?.let { item.tracker to it } }
+                .filter { it.second.score != 0.0 }
+            val trackedItems = remember(trackItems) { trackItems.filter { it.track != null } }
+            val domainTracks = remember(trackItems) { trackItems.mapNotNull { it.track } }
+            val mismatchIds = remember(domainTracks) {
+                TrackerProgressSync.mismatchedIds(domainTracks)
+            }
+            val visibleErrorIds = remember(trackItems, errorTrackerIds) {
+                trackedItems.map { it.tracker.id }.toSet() intersect errorTrackerIds
+            }
+            val legend = listOfNotNull(
+                if (scoredTracks.size > 1) {
+                    stringResource(
+                        KMR.strings.track_normalized_score_summary,
+                        scoredTracks.map { (tracker, track) -> tracker.get10PointScore(track) }.average().toFloat(),
+                        scoredTracks.size,
+                    )
+                } else {
+                    null
+                },
+                if (mismatchIds.isNotEmpty()) stringResource(KMR.strings.track_unsynced_hint) else null,
+                if (visibleErrorIds.isNotEmpty()) stringResource(KMR.strings.track_sync_error_hint) else null,
+            )
+            if (legend.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    legend.forEach { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+            // KMK <--
+            // Unified card only when 2+ actually tracked entries; otherwise show per-tracker rows.
+            // Fixes: untracked manga being shown as tracked, and empty space below card when only 1 tracked.
+            // KMK --> pass ALL trackers (incl. untracked) so a 3rd+ service can still bind from the card.
+            if (trackedItems.size > 1) {
+                UnifiedTrackerCard(
+                    trackItems = trackItems,
+                    seriesTitle = seriesTitle,
+                    dateFormat = dateFormat,
+                    onStatusClick = onStatusClick,
+                    onChapterClick = onChapterClick,
+                    onScoreClick = onScoreClick,
+                    onStartDateEdit = onStartDateEdit,
+                    onEndDateEdit = onEndDateEdit,
+                    onNewSearch = onNewSearch,
+                    onRemoved = onRemoved,
+                    onRemoveAll = onRemoveAll,
+                    onOpenInBrowser = onOpenInBrowser,
+                    onCopyLink = onCopyLink,
+                    onTogglePrivate = onTogglePrivate,
+                    onStepChapter = onStepChapter,
+                    errorTrackerIds = errorTrackerIds,
+                )
+                // KMK <--
+            } else {
+                trackItems.forEach { item ->
+                    if (item.track != null) {
+                        val isMismatched = item.tracker.id in mismatchIds
+                        val supportsScoring = item.tracker.getScoreList().isNotEmpty()
+                        val supportsReadingDates = item.tracker.supportsReadingDates
+                        val supportsPrivate = item.tracker.supportsPrivateTracking
+                        TrackInfoItem(
+                            title = item.track.title,
+                            tracker = item.tracker,
+                            status = item.tracker.getStatus(item.track.status),
+                            onStatusClick = { onStatusClick(item) },
+                            chapters = "${item.track.lastChapterRead.toInt()}".let {
+                                val totalChapters = item.track.totalChapters
+                                if (totalChapters > 0) {
+                                    // Add known total chapter count
+                                    "$it / $totalChapters"
+                                } else {
+                                    it
+                                }
+                            },
+                            onChaptersClick = { onChapterClick(item) },
+                            score = item.tracker.displayScore(item.track)
+                                .takeIf { supportsScoring && item.track.score != 0.0 },
+                            onScoreClick = { onScoreClick(item) }
+                                .takeIf { supportsScoring },
+                            startDate = remember(item.track.startDate) { dateFormat.format(item.track.startDate.toLocalDate()) }
+                                .takeIf { supportsReadingDates && item.track.startDate != 0L },
+                            onStartDateClick = { onStartDateEdit(item) }
+                                .takeIf { supportsReadingDates },
+                            endDate = dateFormat.format(item.track.finishDate.toLocalDate())
+                                .takeIf { supportsReadingDates && item.track.finishDate != 0L },
+                            onEndDateClick = { onEndDateEdit(item) }
+                                .takeIf { supportsReadingDates },
+                            onNewSearch = { onNewSearch(item) },
+                            onOpenInBrowser = { onOpenInBrowser(item) },
+                            onRemoved = { onRemoved(item) },
+                            onCopyLink = { onCopyLink(item) },
+                            private = item.track.private,
+                            onTogglePrivate = { onTogglePrivate(item) }
+                                .takeIf { supportsPrivate },
+                            isMismatched = isMismatched,
+                            hasError = item.tracker.id in errorTrackerIds,
+                        )
+                    }
+                }
+                // KMK --> collapse untracked trackers into one compact add-tracking section
+                // instead of one full row per service, so N logged-in trackers cost ~2 rows.
+                // KMK --> EnhancedTrackers are auto-discovered and never manually bound, so
+                // offering them a tap target can only fail with a bare "no match" toast.
+                val bindableUntracked = remember(trackItems) {
+                    trackItems.filter { it.track == null && it.tracker !is EnhancedTracker }
+                }
+                if (bindableUntracked.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = stringResource(MR.strings.add_tracking),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            bindableUntracked.forEach { item ->
+                                TrackLogoIcon(
+                                    tracker = item.tracker,
+                                    onClick = { onNewSearch(item) },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (trackItems.isNotEmpty()) {
+                    TextButton(
+                        onClick = onManageServices,
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text(stringResource(KMR.strings.track_manage_services))
+                    }
+                }
+                // KMK <--
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackInfoItem(
+    title: String,
+    tracker: Tracker,
+    status: StringResource?,
+    onStatusClick: () -> Unit,
+    chapters: String,
+    onChaptersClick: () -> Unit,
+    score: String?,
+    onScoreClick: (() -> Unit)?,
+    startDate: String?,
+    onStartDateClick: (() -> Unit)?,
+    endDate: String?,
+    onEndDateClick: (() -> Unit)?,
+    onNewSearch: () -> Unit,
+    onOpenInBrowser: () -> Unit,
+    onRemoved: () -> Unit,
+    onCopyLink: () -> Unit,
+    private: Boolean,
+    onTogglePrivate: (() -> Unit)?,
+    isMismatched: Boolean = false,
+    // KMK --> refresh-failure badge (e.g. a 404 remote entry)
+    hasError: Boolean = false,
+    // KMK <--
+) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BadgedBox(
+                badge = {
+                    // KMK --> refresh failure outranks the private badge; legend explains it
+                    if (hasError) {
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                            modifier = Modifier.absoluteOffset(x = (-5).dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = stringResource(
+                                    KMR.strings.track_sync_error_a11y,
+                                    tracker.name,
+                                ),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    } else if (private) {
+                        // KMK <--
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.absoluteOffset(x = (-5).dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.VisibilityOff,
+                                contentDescription = stringResource(MR.strings.tracked_privately),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                },
+            ) {
+                TrackLogoIcon(
+                    tracker = tracker,
+                    onClick = onOpenInBrowser,
+                )
+            }
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp, end = 4.dp),
+            )
+            VerticalDivider()
+            TrackInfoItemMenu(
+                onOpenInBrowser = onOpenInBrowser,
+                onRemoved = onRemoved,
+                onCopyLink = onCopyLink,
+                onChangeEntry = onNewSearch.takeIf { tracker !is EnhancedTracker },
+                private = private,
+                onTogglePrivate = onTogglePrivate,
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .background(
+                    when {
+                        isMismatched -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                    },
+                )
+                .padding(6.dp)
+                .clip(RoundedCornerShape(6.dp)),
+        ) {
+            Column {
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    TrackDetailsItem(
+                        modifier = Modifier.weight(1f),
+                        text = status?.let { stringResource(it) } ?: "",
+                        onClick = onStatusClick,
+                    )
+                    VerticalDivider()
+                    TrackDetailsItem(
+                        modifier = Modifier.weight(1f),
+                        text = chapters,
+                        onClick = onChaptersClick,
+                    )
+                    if (onScoreClick != null) {
+                        VerticalDivider()
+                        TrackDetailsItem(
+                            modifier = Modifier.weight(1f),
+                            text = score,
+                            placeholder = stringResource(MR.strings.score),
+                            onClick = onScoreClick,
+                        )
+                    }
+                }
+
+                if (onStartDateClick != null && onEndDateClick != null) {
+                    HorizontalDivider()
+                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                        TrackDetailsItem(
+                            modifier = Modifier.weight(1F),
+                            text = startDate,
+                            placeholder = stringResource(MR.strings.track_started_reading_date),
+                            onClick = onStartDateClick,
+                        )
+                        VerticalDivider()
+                        TrackDetailsItem(
+                            modifier = Modifier.weight(1F),
+                            text = endDate,
+                            placeholder = stringResource(MR.strings.track_finished_reading_date),
+                            onClick = onEndDateClick,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val UNSET_TEXT_ALPHA = 0.5F
+
+@Composable
+private fun TrackDetailsItem(
+    text: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+) {
+    Box(
+        modifier = modifier
+            // KMK --> no full-height stretch so short dialog content shrink-fits
+            .clickable(onClick = onClick)
+            // KMK <--
+            .padding(8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text ?: placeholder,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (text == null) UNSET_TEXT_ALPHA else 1f),
+        )
+    }
+}
+
+@Composable
+private fun TrackInfoItemMenu(
+    onOpenInBrowser: () -> Unit,
+    onRemoved: () -> Unit,
+    onCopyLink: () -> Unit,
+    onChangeEntry: (() -> Unit)?,
+    private: Boolean,
+    onTogglePrivate: (() -> Unit)?,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = stringResource(MR.strings.label_more),
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(MR.strings.action_open_in_browser)) },
+                onClick = {
+                    onOpenInBrowser()
+                    expanded = false
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(MR.strings.action_copy_link)) },
+                onClick = {
+                    onCopyLink()
+                    expanded = false
+                },
+            )
+            if (onChangeEntry != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(KMR.strings.track_change_entry)) },
+                    onClick = {
+                        onChangeEntry()
+                        expanded = false
+                    },
+                )
+            }
+            if (onTogglePrivate != null) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                if (private) {
+                                    MR.strings.action_toggle_private_off
+                                } else {
+                                    MR.strings.action_toggle_private_on
+                                },
+                            ),
+                        )
+                    },
+                    onClick = {
+                        onTogglePrivate()
+                        expanded = false
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(MR.strings.action_remove)) },
+                onClick = {
+                    onRemoved()
+                    expanded = false
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnifiedTrackerCard(
+    trackItems: List<TrackItem>,
+    seriesTitle: String,
+    dateFormat: DateTimeFormatter,
+    onStatusClick: (TrackItem) -> Unit,
+    onChapterClick: (TrackItem) -> Unit,
+    onScoreClick: (TrackItem) -> Unit,
+    onStartDateEdit: (TrackItem) -> Unit,
+    onEndDateEdit: (TrackItem) -> Unit,
+    // KMK --> needed so untracked icons in the card can bind a 3rd+ tracker
+    onNewSearch: (TrackItem) -> Unit,
+    // KMK <--
+    onRemoved: (TrackItem) -> Unit,
+    onOpenInBrowser: (TrackItem) -> Unit,
+    onCopyLink: (TrackItem) -> Unit,
+    // KMK --> bulk removal goes through one confirmation; error ids badge failed refreshes
+    onRemoveAll: (List<TrackItem>) -> Unit = {},
+    onTogglePrivate: (TrackItem) -> Unit = {},
+    onStepChapter: (Int) -> Unit = {},
+    errorTrackerIds: Set<Long> = emptySet(),
+    // KMK <--
+) {
+    val domainTracksForSync = remember(trackItems) { trackItems.mapNotNull { it.track } }
+    val preferredId = remember(domainTracksForSync) {
+        try {
+            val prefs = globalAppGraph.trackPreferences
+            val mangaId = domainTracksForSync.firstOrNull()?.mangaId ?: 0L
+            if (mangaId != 0L) prefs.getPreferredTrackerForManga(mangaId) else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val resolved = remember(domainTracksForSync, preferredId) {
+        TrackerProgressSync.resolvePreferredTrack(domainTracksForSync, preferredId)
+    }
+    val primary = remember(trackItems, resolved) {
+        resolved?.let { r -> trackItems.find { it.track?.trackerId == r.trackerId } } ?: trackItems.firstOrNull { it.track != null } ?: trackItems.firstOrNull()
+    } ?: return
+    val displayTrack = primary.track
+    val displayTracker = primary.tracker
+    val isMismatched = remember(domainTracksForSync, preferredId) {
+        TrackerProgressSync.shouldHighlightMismatch(domainTracksForSync, preferredId)
+    }
+    val statusText = displayTrack?.let { displayTracker.getStatus(it.status)?.let { res -> stringResource(res) } }
+        ?: stringResource(MR.strings.reading)
+    val supportsScore = displayTracker.getScoreList().isNotEmpty()
+    val supportsReadingDates = displayTracker.supportsReadingDates
+    val supportsPrivate = displayTracker.supportsPrivateTracking
+    val scoreText = displayTrack
+        ?.takeIf { it.score != 0.0 }
+        ?.let { displayTracker.displayScore(it) }
+        ?.takeIf { it.isNotBlank() }
+    val showScoreGlyph = scoreText != null && !scoreText.contains('★')
+    val chaptersRead = displayTrack?.lastChapterRead?.toInt() ?: 0
+    val totalChapters = displayTrack?.totalChapters ?: 0
+    val chaptersText = if (totalChapters > 0) {
+        "$chaptersRead/$totalChapters"
+    } else if (chaptersRead > 0) {
+        "$chaptersRead"
+    } else {
+        "0"
+    }
+    val startDate = displayTrack?.startDate?.takeIf { it != 0L }?.let { dateFormat.format(it.toLocalDate()) }
+    val finishDate = displayTrack?.finishDate?.takeIf { it != 0L }?.let { dateFormat.format(it.toLocalDate()) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            // KMK --> denser card to shorten the tracker menu
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (seriesTitle.isNotBlank()) {
+            Text(
+                text = seriesTitle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 2.dp),
+            )
+        }
+        // KMK --> per-tracker unsynced dot (vs preferred) + untracked icons bind via onNewSearch
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            trackItems.forEach { item ->
+                val itemTrack = item.track
+                val isUnsynced = itemTrack != null && resolved != null &&
+                    abs(itemTrack.lastChapterRead - resolved.lastChapterRead) > 0.01
+                // KMK --> refresh failure outranks the unsynced dot; legend explains both
+                val isErrored = item.tracker.id in errorTrackerIds
+                // KMK <--
+                BadgedBox(
+                    badge = {
+                        if (isErrored) {
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Warning,
+                                    contentDescription = stringResource(
+                                        KMR.strings.track_sync_error_a11y,
+                                        item.tracker.name,
+                                    ),
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            }
+                        } else if (isUnsynced) {
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Sync,
+                                    contentDescription = stringResource(
+                                        KMR.strings.track_unsynced_a11y,
+                                        item.tracker.name,
+                                    ),
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            }
+                        }
+                    },
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        TrackLogoIcon(
+                            tracker = item.tracker,
+                            onClick = { if (itemTrack != null) onOpenInBrowser(item) else onNewSearch(item) },
+                        )
+                    }
+                }
+            }
+            // KMK -->
+            Spacer(Modifier.weight(1f))
+            TrackInfoItemMenu(
+                onOpenInBrowser = { onOpenInBrowser(primary) },
+                onRemoved = { onRemoved(primary) },
+                onCopyLink = { onCopyLink(primary) },
+                onChangeEntry = ({ onNewSearch(primary) }).takeIf { displayTracker !is EnhancedTracker },
+                private = displayTrack?.private == true,
+                onTogglePrivate = { onTogglePrivate(primary) }
+                    .takeIf { supportsPrivate },
+            )
+            // KMK <--
+        }
+        // KMK <--
+        Surface(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .fillMaxWidth(),
+            color = if (isMismatched) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.height(IntrinsicSize.Min),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onStatusClick(primary) }
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (supportsScore) {
+                        VerticalDivider()
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onScoreClick(primary) }
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (scoreText == null) {
+                                Text(
+                                    text = stringResource(MR.strings.score),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = UNSET_TEXT_ALPHA),
+                                )
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(text = scoreText, style = MaterialTheme.typography.bodyMedium)
+                                    if (showScoreGlyph) {
+                                        Text(
+                                            text = "★",
+                                            color = MaterialTheme.colorScheme.primary,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.height(IntrinsicSize.Min),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(0.15f)
+                            .clickable { onStepChapter(-1) }
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = "−", style = MaterialTheme.typography.titleMedium)
+                    }
+                    VerticalDivider()
+                    Box(
+                        modifier = Modifier
+                            .weight(0.7f)
+                            .clickable { onChapterClick(primary) }
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = chaptersText, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    VerticalDivider()
+                    Box(
+                        modifier = Modifier
+                            .weight(0.15f)
+                            .clickable { onStepChapter(1) }
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = "+", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+                if (supportsReadingDates) {
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier.height(IntrinsicSize.Min),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onStartDateEdit(primary) }
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = startDate ?: stringResource(MR.strings.track_started_reading_date),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (startDate == null) UNSET_TEXT_ALPHA else 1f),
+                            )
+                        }
+                        VerticalDivider()
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onEndDateEdit(primary) }
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = finishDate ?: stringResource(MR.strings.track_finished_reading_date),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (finishDate == null) UNSET_TEXT_ALPHA else 1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        // KMK -->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(onClick = { onRemoveAll(trackItems.filter { it.track != null }) }) {
+                Text(
+                    text = stringResource(KMR.strings.track_remove_all_trackers),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        // KMK <--
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun TrackInfoDialogHomePreviews(
+    @PreviewParameter(TrackInfoDialogHomePreviewProvider::class)
+    content: @Composable () -> Unit,
+) {
+    TachiyomiPreviewTheme {
+        Surface {
+            content()
+        }
+    }
+}

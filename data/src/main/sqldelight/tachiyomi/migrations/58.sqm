@@ -1,0 +1,25 @@
+-- KMK -->
+-- Migration 58: user-edited manga metadata ("Manga info edit") moves from the
+-- `edits.json` blob in the app's external files dir into the database.
+--
+-- Nothing to backfill: the legacy file is read and imported once, lazily, by
+-- CustomMangaRepositoryImpl on first construction (which happens during App.onCreate).
+-- Doing it in Kotlin rather than here keeps the old JSON schema - and its backwards
+-- compatibility rules - in one place instead of spread across a migration that can
+-- never be re-run after the file has been consumed.
+--
+-- The table is deliberately keyed on mangas(_id) with ON DELETE CASCADE so an edit
+-- cannot outlive the entry it belongs to.
+CREATE TABLE custom_manga_info (
+    manga_id INTEGER NOT NULL PRIMARY KEY,
+    title TEXT,
+    author TEXT,
+    artist TEXT,
+    thumbnail_url TEXT,
+    description TEXT,
+    genre TEXT AS List<String>,
+    status INTEGER,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id)
+    ON DELETE CASCADE
+);
+-- KMK <--

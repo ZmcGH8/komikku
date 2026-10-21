@@ -1,0 +1,44 @@
+# Build files
+.gradle
+#.vscode
+.kotlin
+build
+.cxx/
+
+# IDE files
+*.iml
+.idea/*
+!.idea/icon.png
+/captures
+.history
+
+# Configuration files
+local.properties
+
+# Machine-local daemon JVM criteria, written by Gradle's own tooling on first run
+gradle/gradle-daemon-jvm.properties
+
+# macOS specific files
+.DS_Store
+
+/app/client_secrets.json
+/app/google-services.json
+*.jks
+app/standard/preview/*
+
+# OpenCode artifacts
+.omo/
+.playwright-mcp/
+AUDIT.md
+extensions-source/
+.gradle-home/
+tasks/
+/opencode.json
+/opencode.json.evolver-backup.json
+
+# WSL-built native libs (llamatik-native/build.gradle.kts wslNativeBuild)
+llamatik-native/src/main/jniLibs/
+
+# Python bytecode from the .github/scripts release tooling
+__pycache__/
+*.py[cod]

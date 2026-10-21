@@ -1,0 +1,58 @@
+import kotlin.String;
+import kotlin.collections.List;
+
+-- SY -->
+-- User-edited manga metadata ("Manga info edit"). Lived in a JSON blob in the app's
+-- external files dir, which meant the edits were invisible to the database: they were
+-- dropped on uninstall, absent from db exports, and never touched by the backup
+-- integrity machinery. Storing them here makes them survive migrations, exports and
+-- the rolling-corruption backups like every other piece of library state.
+--
+-- Only rows where the user actually deviated from the source are kept; a fully NULL
+-- row is meaningless, so [upsert] is paired with [deleteByMangaId] and callers must
+-- delete instead of inserting an all-NULL row.
+--
+-- ON DELETE CASCADE keeps this from outliving the manga it describes, which is also
+-- what stops orphaned edits from being re-attached if the source ever reuses an id.
+-- SY <--
+CREATE TABLE custom_manga_info (
+    manga_id INTEGER NOT NULL PRIMARY KEY,
+    title TEXT,
+    author TEXT,
+    artist TEXT,
+    thumbnail_url TEXT,
+    description TEXT,
+    genre TEXT AS List<String>,
+    status INTEGER,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id)
+    ON DELETE CASCADE
+);
+
+-- SY -->
+selectAll:
+SELECT * FROM custom_manga_info;
+
+selectByMangaId:
+SELECT * FROM custom_manga_info
+WHERE manga_id = :mangaId;
+
+-- Replaces every field, including with NULL: the edit dialog submits the full set, so a
+-- cleared field has to be able to fall back to the source value again.
+upsert:
+INSERT INTO custom_manga_info(manga_id, title, author, artist, thumbnail_url, description, genre, status)
+VALUES (:mangaId, :title, :author, :artist, :thumbnailUrl, :description, :genre, :status)
+ON CONFLICT(manga_id)
+DO UPDATE
+SET
+    title = :title,
+    author = :author,
+    artist = :artist,
+    thumbnail_url = :thumbnailUrl,
+    description = :description,
+    genre = :genre,
+    status = :status
+WHERE manga_id = :mangaId;
+
+deleteByMangaId:
+DELETE FROM custom_manga_info WHERE manga_id = :mangaId;
+-- SY <--

@@ -1,0 +1,268 @@
+package eu.kanade.tachiyomi.data.track
+
+import android.content.Context
+import androidx.annotation.CallSuper
+import eu.kanade.domain.track.interactor.AddTracks
+import eu.kanade.domain.track.model.toDomainTrack
+import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.tachiyomi.data.database.models.Track
+import eu.kanade.tachiyomi.data.track.core.TrackerException
+import eu.kanade.tachiyomi.data.track.core.TrackerId
+import eu.kanade.tachiyomi.data.track.model.TrackMangaMetadata
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.network.NetworkHelper
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import logcat.LogPriority
+import mihon.app.di.AppGraph
+import mihon.app.di.globalAppGraph
+import okhttp3.OkHttpClient
+import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.manga.model.SequelPrequelEntry
+import tachiyomi.domain.track.interactor.InsertTrack
+import tachiyomi.domain.track.model.Track as DomainTrack
+
+abstract class BaseTracker(
+    override val id: Long,
+    override val name: String,
+) : Tracker {
+
+    // KMK -->
+    protected val appGraph: AppGraph get() = globalAppGraph
+    private val context: Context by lazy { appGraph.context }
+    // KMK <--
+
+    val trackPreferences: TrackPreferences by lazy { appGraph.trackPreferences }
+    val networkService: NetworkHelper by lazy { appGraph.networkHelper }
+    private val addTracks: AddTracks by lazy { appGraph.addTracks }
+    private val insertTrack: InsertTrack by lazy { appGraph.insertTrack }
+
+    override val client: OkHttpClient
+        get() = networkService.client
+
+    // Application and remote support for reading dates
+    override val supportsReadingDates: Boolean = false
+
+    override val supportsPrivateTracking: Boolean = false
+
+    // KMK --> Convert a service score to 0..10 and reject non-finite remote values
+    // before they can poison cross-tracker averages.
+    protected fun normalizeScore(score: Double, sourceMaximum: Double = 10.0): Double {
+        if (!score.isFinite() || !sourceMaximum.isFinite() || sourceMaximum <= 0.0) return 0.0
+        return (score * 10.0 / sourceMaximum).coerceIn(0.0, 10.0)
+    }
+
+    override fun get10PointScore(track: DomainTrack): Double = normalizeScore(track.score)
+    // KMK <--
+
+    override fun indexToScore(index: Int): Double {
+        return index.toDouble()
+    }
+
+    @CallSuper
+    override fun logout() {
+        trackPreferences.setCredentials(this, "", "")
+    }
+
+    override val isLoggedIn: Boolean
+        get() = getUsername().isNotEmpty() &&
+            getPassword().isNotEmpty()
+
+    override val isLoggedInFlow: Flow<Boolean> by lazy {
+        combine(
+            trackPreferences.trackUsername(this).changes(),
+            trackPreferences.trackPassword(this).changes(),
+        ) { username, password ->
+            username.isNotEmpty() && password.isNotEmpty()
+        }
+    }
+
+    override fun getUsername() = trackPreferences.trackUsername(this).get()
+
+    override fun getPassword() = trackPreferences.trackPassword(this).get()
+
+    override fun saveCredentials(username: String, password: String) {
+        trackPreferences.setCredentials(this, username, password)
+    }
+
+    override suspend fun register(item: Track, mangaId: Long) {
+        item.manga_id = mangaId
+        try {
+            addTracks.bind(this, item, mangaId)
+        } catch (e: Throwable) {
+            val wrapped = if (e is TrackerException) e else TrackerException.NetworkError(id, e)
+            logcat(LogPriority.ERROR, wrapped) { "Failed to register track ${item.title} id=$id" }
+            throw wrapped
+        }
+    }
+
+    override suspend fun setRemoteStatus(track: Track, status: Long) {
+        // KMK --> Every tracker funnels a status change through here, so one hook covers all
+        // twelve services instead of one per override. Counted before the remote call so a
+        // network failure still counts the user's edit.
+        runCatching { globalAppGraph.achievementManager.incrementCounter("tracker_updates") }
+        runCatching {
+            globalAppGraph.rotatingAchievementPool.markProgress("rotating_daily_tracker_update_3")
+            globalAppGraph.rotatingAchievementPool.markProgress("rotating_weekly_tracker_5")
+        }
+        unlockTrackerUsage()
+        // KMK <--
+        // KMK --> leaving a not-started list starts the clock when no start date is set
+        val wasNotStarted = hasNotStartedReading(track.status)
+        // Captured before the assignment below so the status categories can be moved only
+        // when the status really changed, matching the guard in RefreshTracks.
+        val previousStatus = track.status
+        // KMK <--
+        track.status = status
+        if (track.status == getCompletionStatus() && track.total_chapters != 0L) {
+            track.last_chapter_read = track.total_chapters.toDouble()
+        }
+        // KMK -->
+        if (wasNotStarted && !hasNotStartedReading(status) && track.started_reading_date <= 0L) {
+            track.started_reading_date = System.currentTimeMillis()
+        }
+        // KMK <--
+        updateRemote(track)
+        // KMK --> After updateRemote, so a rejected change does not reorganise the library, and
+        // wrapped so a failure here can never fail the status change the user just made.
+        if (previousStatus != status) {
+            runCatching {
+                val parsed = TrackStatus.parseTrackerStatus(globalAppGraph.trackerManager, id, status)
+                globalAppGraph.syncCategoriesWithTrackStatus.await(track.manga_id, parsed?.int)
+            }
+        }
+        // KMK <--
+    }
+
+    override suspend fun setRemoteLastChapterRead(track: Track, chapterNumber: Int): /* KMK --> */ Track /* KMK <-- */ {
+        if (
+            track.last_chapter_read == 0.0 &&
+            track.last_chapter_read < chapterNumber &&
+            track.status != getRereadingStatus()
+        ) {
+            track.status = getReadingStatus()
+        }
+        track.last_chapter_read = chapterNumber.toDouble()
+        if (track.total_chapters != 0L && track.last_chapter_read.toLong() == track.total_chapters) {
+            track.status = getCompletionStatus()
+            track.finished_reading_date = System.currentTimeMillis()
+        }
+        updateRemote(track)
+        // KMK -->
+        return track
+        // KMK <--
+    }
+
+    override suspend fun setRemoteScore(track: Track, scoreString: String) {
+        val scores = getScoreList()
+        var index = scores.indexOf(scoreString)
+        if (index < 0) {
+            // KMK --> score wheel strings can drift from stored values (e.g. fractional
+            // MangaBaka ratings like 85.5 displaying as "85" off the STEP_10 grid, or
+            // MangaUpdates values with extra decimals). Snap to the closest numeric
+            // entry instead of crashing in indexToScore(-1).
+            index = scores.indices.minByOrNull {
+                val candidate = scores[it].toDoubleOrNull()
+                val wanted = scoreString.toDoubleOrNull()
+                if (candidate != null && wanted != null) {
+                    kotlin.math.abs(candidate - wanted)
+                } else {
+                    Double.MAX_VALUE
+                }
+            } ?: return
+            if (scores[index].toDoubleOrNull() == null) return
+        }
+        track.score = indexToScore(index)
+        // KMK --> After the score is resolved, so a string that failed to snap to a real
+        // entry does not count as scoring.
+        runCatching {
+            globalAppGraph.achievementManager.tryUnlockDirect("track_score")
+            globalAppGraph.rotatingAchievementPool.markProgress("rotating_weekly_extra_6")
+        }
+        unlockTrackerUsage()
+        // KMK <--
+        updateRemote(track)
+    }
+
+    override suspend fun setRemoteStartDate(track: Track, epochMillis: Long) {
+        track.started_reading_date = epochMillis
+        updateRemote(track)
+    }
+
+    override suspend fun setRemoteFinishDate(track: Track, epochMillis: Long) {
+        track.finished_reading_date = epochMillis
+        updateRemote(track)
+    }
+
+    override suspend fun setRemotePrivate(track: Track, private: Boolean) {
+        track.private = private
+        updateRemote(track)
+    }
+
+    // KMK -->
+    override val supportsRereadCount: Boolean = false
+
+    override suspend fun setRemoteRereadCount(track: Track, rereadCount: Int) {
+        track.reread_count = rereadCount
+        updateRemote(track)
+    }
+    // KMK <--
+
+    override suspend fun getMangaMetadata(track: DomainTrack): TrackMangaMetadata {
+        throw NotImplementedError("Not implemented.")
+    }
+
+    // SY -->
+    override suspend fun searchById(id: String): TrackSearch? {
+        throw NotImplementedError("Not implemented.")
+    }
+    // SY <--
+
+    // KMK -->
+    /**
+     * Sequel/prequel entries for this service's [remoteId], or null when the
+     * service exposes no relations API. The sequel/prequel provider tries the
+     * priority tracker first, then every other logged-in tracker in order.
+     */
+    open suspend fun getRelatedEntries(remoteId: Long): List<SequelPrequelEntry>? = null
+
+    /**
+     * Extracts this service's remote id from a [SequelPrequelEntry.url] it
+     * produced (AniList siteUrl, MangaBaka tracking_url), or null when the url
+     * is not one of ours. Lets tap resolution build the stub from our own
+     * metadata instead of falling through to the website.
+     */
+    open fun parseRelatedEntryId(url: String): Long? = null
+    // KMK <--
+
+    // KMK --> Per-service achievements, keyed off this.id so one base-class hook covers
+    // every service instead of one override each.
+    private fun unlockTrackerUsage() {
+        runCatching {
+            val achievementId = when (id) {
+                TrackerId.ANILIST -> "tracker_anilist"
+                TrackerId.MANGA_UPDATES -> "tracker_mangaupdates"
+                else -> null
+            } ?: return
+            globalAppGraph.achievementManager.tryUnlockDirect(achievementId)
+        }
+    }
+
+    private suspend fun updateRemote(track: Track): Unit = withIOContext {
+        try {
+            update(track)
+            track.toDomainTrack(idRequired = false)?.let {
+                insertTrack.await(it)
+            }
+        } catch (e: Exception) {
+            val wrapped = when (e) {
+                is TrackerException -> e
+                is java.io.IOException -> TrackerException.NetworkError(id, e)
+                else -> TrackerException.NetworkError(id, e)
+            }
+            logcat(LogPriority.ERROR, wrapped) { "Failed to update remote track data id=$id name=$name" }
+            throw wrapped
+        }
+    }
+}

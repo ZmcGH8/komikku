@@ -1,0 +1,592 @@
+package eu.kanade.presentation.category.components
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.unit.dp
+import dev.icerock.moko.resources.StringResource
+import eu.kanade.core.preference.asToggleableState
+import eu.kanade.presentation.category.visualName
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.delay
+import tachiyomi.core.common.preference.CheckboxState
+import tachiyomi.domain.category.model.Category
+import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
+import kotlin.time.Duration.Companion.seconds
+
+// KMK -->
+@Composable
+fun CategoryMoveDialog(
+    parents: ImmutableList<Category>,
+    excludeParentId: Long? = null,
+    onDismissRequest: () -> Unit,
+    onConfirm: (Long) -> Unit,
+) {
+    var selected by remember { mutableStateOf(parents.firstOrNull { it.id != excludeParentId }?.id) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                enabled = selected != null,
+                onClick = {
+                    selected?.let(onConfirm)
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(KMR.strings.category_manager_move))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = { Text(text = stringResource(KMR.strings.category_manager_move_title)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                parents.forEach { parent ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = parent.id != excludeParentId) { selected = parent.id },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selected == parent.id,
+                            enabled = parent.id != excludeParentId,
+                            onClick = { selected = parent.id },
+                        )
+                        Text(
+                            text = parent.name,
+                            modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
+                        )
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+fun CategoryMergeDialog(
+    candidates: ImmutableList<Category>,
+    onDismissRequest: () -> Unit,
+    onConfirm: (Long) -> Unit,
+) {
+    var selected by remember { mutableStateOf(candidates.firstOrNull()?.id) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                enabled = selected != null && candidates.size >= 2,
+                onClick = {
+                    selected?.let(onConfirm)
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(KMR.strings.category_manager_merge))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = { Text(text = stringResource(KMR.strings.category_manager_merge_title)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                candidates.forEach { candidate ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = candidate.id },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selected == candidate.id,
+                            onClick = { selected = candidate.id },
+                        )
+                        Text(
+                            text = candidate.name,
+                            modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
+                        )
+                    }
+                }
+            }
+        },
+    )
+}
+// KMK <--
+
+// KMK -->
+private enum class SubcategoryNameSource {
+    ARTIST,
+    AUTHOR,
+    MANUAL,
+}
+
+@Composable
+fun CreateSubcategoryDialog(
+    onDismissRequest: () -> Unit,
+    onCreate: (String) -> Unit,
+    artist: String?,
+    author: String?,
+) {
+    val initial = when {
+        !artist.isNullOrBlank() -> SubcategoryNameSource.ARTIST to artist.orEmpty()
+        !author.isNullOrBlank() -> SubcategoryNameSource.AUTHOR to author.orEmpty()
+        else -> SubcategoryNameSource.MANUAL to ""
+    }
+    var source by remember { mutableStateOf(initial.first) }
+    var name by remember { mutableStateOf(initial.second) }
+
+    val hasDetection = !artist.isNullOrBlank() || !author.isNullOrBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = {
+                    onCreate(name)
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.action_add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = { Text(text = stringResource(KMR.strings.create_subcategory_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(text = stringResource(MR.strings.name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (hasDetection) {
+                    Text(
+                        text = stringResource(KMR.strings.create_subcategory_from),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                    )
+                    SubcategorySourceRow(
+                        label = stringResource(
+                            KMR.strings.create_subcategory_from_artist,
+                            artist.orEmpty(),
+                        ),
+                        selected = source == SubcategoryNameSource.ARTIST,
+                        enabled = !artist.isNullOrBlank(),
+                        onSelect = {
+                            source = SubcategoryNameSource.ARTIST
+                            name = artist.orEmpty()
+                        },
+                    )
+                    SubcategorySourceRow(
+                        label = stringResource(
+                            KMR.strings.create_subcategory_from_author,
+                            author.orEmpty(),
+                        ),
+                        selected = source == SubcategoryNameSource.AUTHOR,
+                        enabled = !author.isNullOrBlank(),
+                        onSelect = {
+                            source = SubcategoryNameSource.AUTHOR
+                            name = author.orEmpty()
+                        },
+                    )
+                    SubcategorySourceRow(
+                        label = stringResource(KMR.strings.create_subcategory_from_manual),
+                        selected = source == SubcategoryNameSource.MANUAL,
+                        enabled = true,
+                        onSelect = { source = SubcategoryNameSource.MANUAL },
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun SubcategorySourceRow(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onSelect: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onSelect)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+        )
+    }
+}
+// KMK <--
+
+@Composable
+fun CategoryCreateDialog(
+    onDismissRequest: () -> Unit,
+    onCreate: (String) -> Unit,
+    categories: ImmutableList<String>,
+    // SY -->
+    title: String = stringResource(MR.strings.action_add_category),
+    extraMessage: String? = null,
+    alreadyExistsError: StringResource = MR.strings.error_category_exists,
+    // SY <--
+) {
+    var name by remember { mutableStateOf("") }
+
+    val focusRequester = remember { FocusRequester() }
+    val nameAlreadyExists = remember(name) { categories.contains(name) }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotEmpty() && !nameAlreadyExists,
+                onClick = {
+                    onCreate(name)
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.action_add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = {
+            // SY -->
+            Text(text = title)
+            // SY <--
+        },
+        text = {
+            // SY -->
+            Column {
+                extraMessage?.let { Text(it) }
+                // SY <--
+
+                OutlinedTextField(
+                    modifier = Modifier
+                        .focusRequester(focusRequester),
+                    value = name,
+                    onValueChange = { name = it },
+                    label = {
+                        Text(text = stringResource(MR.strings.name))
+                    },
+                    supportingText = {
+                        val msgRes = if (name.isNotEmpty() && nameAlreadyExists) {
+                            // SY -->
+                            alreadyExistsError
+                            // SY <--
+                        } else {
+                            MR.strings.information_required_plain
+                        }
+                        Text(text = stringResource(msgRes))
+                    },
+                    isError = name.isNotEmpty() && nameAlreadyExists,
+                    singleLine = true,
+                )
+                // SY -->
+            }
+            // SY <--
+        },
+    )
+
+    LaunchedEffect(focusRequester) {
+        // TODO: https://issuetracker.google.com/issues/204502668
+        delay(0.1.seconds)
+        focusRequester.requestFocus()
+    }
+}
+
+@Composable
+fun CategoryRenameDialog(
+    onDismissRequest: () -> Unit,
+    onRename: (String) -> Unit,
+    categories: ImmutableList<String>,
+    category: String,
+) {
+    var name by remember { mutableStateOf(category) }
+    var valueHasChanged by remember { mutableStateOf(false) }
+
+    val focusRequester = remember { FocusRequester() }
+    val nameAlreadyExists = remember(name) { categories.contains(name) }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                enabled = valueHasChanged && !nameAlreadyExists,
+                onClick = {
+                    onRename(name)
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.action_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = {
+            Text(text = stringResource(MR.strings.action_rename_category))
+        },
+        text = {
+            OutlinedTextField(
+                modifier = Modifier.focusRequester(focusRequester),
+                value = name,
+                onValueChange = {
+                    valueHasChanged = name != it
+                    name = it
+                },
+                label = { Text(text = stringResource(MR.strings.name)) },
+                supportingText = {
+                    val msgRes = if (valueHasChanged && nameAlreadyExists) {
+                        MR.strings.error_category_exists
+                    } else {
+                        MR.strings.information_required_plain
+                    }
+                    Text(text = stringResource(msgRes))
+                },
+                isError = valueHasChanged && nameAlreadyExists,
+                singleLine = true,
+            )
+        },
+    )
+
+    LaunchedEffect(focusRequester) {
+        // TODO: https://issuetracker.google.com/issues/204502668
+        delay(0.1.seconds)
+        focusRequester.requestFocus()
+    }
+}
+
+@Composable
+fun CategoryDeleteDialog(
+    onDismissRequest: () -> Unit,
+    onDelete: () -> Unit,
+    // SY -->
+    category: String = "",
+    title: String = stringResource(MR.strings.delete_category),
+    text: String = stringResource(MR.strings.delete_category_confirmation, category),
+    // SY <--
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = {
+                onDelete()
+                onDismissRequest()
+            }) {
+                Text(text = stringResource(MR.strings.action_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = {
+            // SY -->
+            Text(text = title)
+            // SY <--
+        },
+        text = {
+            // SY -->
+            Text(text = text)
+            // SY <--
+        },
+    )
+}
+
+@Composable
+fun ChangeCategoryDialog(
+    initialSelection: ImmutableList<CheckboxState<Category>>,
+    onDismissRequest: () -> Unit,
+    onEditCategories: () -> Unit,
+    onConfirm: (List<Long>, List<Long>) -> Unit,
+) {
+    if (initialSelection.isEmpty()) {
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            confirmButton = {
+                tachiyomi.presentation.core.components.material.TextButton(
+                    onClick = {
+                        onDismissRequest()
+                        onEditCategories()
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_edit_categories))
+                }
+            },
+            title = {
+                Text(text = stringResource(MR.strings.action_move_category))
+            },
+            text = {
+                Text(text = stringResource(MR.strings.information_empty_category_dialog))
+            },
+        )
+        return
+    }
+    var selection by remember { mutableStateOf(initialSelection) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            Row {
+                tachiyomi.presentation.core.components.material.TextButton(onClick = {
+                    onDismissRequest()
+                    onEditCategories()
+                }) {
+                    Text(text = stringResource(MR.strings.action_edit))
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                tachiyomi.presentation.core.components.material.TextButton(onClick = onDismissRequest) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+                tachiyomi.presentation.core.components.material.TextButton(
+                    onClick = {
+                        onDismissRequest()
+                        val parentIdById = selection.associate { it.value.id to it.value.parentId }
+                        val included = selection
+                            .filter { it is CheckboxState.State.Checked || it is CheckboxState.TriState.Include }
+                            .flatMap { it.value.id.withAncestorChain(parentIdById) }
+                            .toSet()
+                        val excluded = (
+                            selection
+                                .filter { it is CheckboxState.State.None || it is CheckboxState.TriState.None }
+                                .mapTo(mutableSetOf()) { it.value.id }
+                            ) - included
+                        onConfirm(included.toList(), excluded.toList())
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_ok))
+                }
+            }
+        },
+        title = {
+            Text(text = stringResource(MR.strings.action_move_category))
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                // KMK -->
+                // Stable display order: each root category followed by its subcategories
+                val displayOrder = remember(initialSelection) {
+                    val roots = initialSelection.filter { it.value.parentId == 0L }.map { it.value.id }
+                    val subsByParent = initialSelection
+                        .filter { it.value.parentId != 0L }
+                        .associate { it.value.id to it.value.parentId }
+                    val ordered = mutableListOf<Long>()
+                    roots.forEach { rootId ->
+                        ordered.add(rootId)
+                        subsByParent.filterValues { it == rootId }.keys.forEach(ordered::add)
+                    }
+                    subsByParent.keys.forEach { subId -> if (subId !in ordered) ordered.add(subId) }
+                    ordered
+                }
+                // KMK <--
+                displayOrder.mapNotNull { id -> selection.find { it.value.id == id } }.forEach { checkbox ->
+                    val onChange: (CheckboxState<Category>) -> Unit = {
+                        val index = selection.indexOf(it)
+                        if (index != -1) {
+                            val mutableList = selection.toMutableList()
+                            mutableList[index] = it.next()
+                            selection = mutableList.toList().toImmutableList()
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // KMK -->
+                            .padding(start = if (checkbox.value.parentId != 0L) MaterialTheme.padding.medium else 0.dp)
+                            // KMK <--
+                            .clickable { onChange(checkbox) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        when (checkbox) {
+                            is CheckboxState.TriState -> {
+                                TriStateCheckbox(
+                                    state = checkbox.asToggleableState(),
+                                    onClick = { onChange(checkbox) },
+                                )
+                            }
+                            is CheckboxState.State -> {
+                                Checkbox(
+                                    checked = checkbox.isChecked,
+                                    onCheckedChange = { onChange(checkbox) },
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = checkbox.value.visualName,
+                            modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
+                        )
+                    }
+                }
+            }
+        },
+    )
+}
+
+/**
+ * Returns [id] together with every ancestor category id up to the root, so marking a
+ * subcategory always marks its parents as well.
+ */
+internal fun Long.withAncestorChain(parentIdById: Map<Long, Long>): Set<Long> {
+    val chain = mutableSetOf(this)
+    var cursor = parentIdById[this] ?: 0L
+    while (cursor != 0L && chain.add(cursor)) {
+        cursor = parentIdById[cursor] ?: 0L
+    }
+    return chain
+}
+
+internal fun Long.withAncestorChain(categories: List<Category>): Set<Long> =
+    withAncestorChain(categories.associate { it.id to it.parentId })

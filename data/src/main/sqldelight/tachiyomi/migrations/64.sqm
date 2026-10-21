@@ -1,0 +1,79 @@
+-- KMK -->
+-- Migration 64: carry the bookmark colour through updatesView.
+--
+-- The bookmark colour has been a column on `chapters` since migration 57, and the details
+-- screen renders it, but the update list could not: `updatesView` never selected it, so
+-- `UpdatesWithRelations` had no value to tint the bookmark icon with and every coloured
+-- bookmark showed the theme's primary there. Nothing about the colour is new here - only the
+-- one view that was missing the column.
+--
+-- A schema bump does not re-create a view on its own, so it is dropped and recreated. The
+-- queries are not part of a migration: SQLDelight regenerates them from the .sq files.
+--
+-- Both halves of the UNION have to gain the column. SQLite rejects a compound SELECT whose
+-- branches disagree on the column count, which would fail the migration outright rather than
+-- silently dropping the column from one of them.
+
+DROP VIEW IF EXISTS updatesView;
+
+-- NOTE: must update MERGED_SOURCE_ID (6969) here
+CREATE VIEW updatesView AS
+SELECT
+    mangas._id AS mangaId,
+    mangas.title AS mangaTitle,
+    chapters._id AS chapterId,
+    chapters.name AS chapterName,
+    chapters.scanlator,
+    chapters.url AS chapterUrl,
+    chapters.read,
+    chapters.bookmark,
+    chapters.bookmark_color,
+    chapters.last_page_read,
+    mangas.source,
+    mangas.favorite,
+    mangas.thumbnail_url AS thumbnailUrl,
+    mangas.cover_last_modified AS coverLastModified,
+    chapters.date_upload AS dateUpload,
+    chapters.date_fetch AS datefetch,
+    excluded_scanlators.scanlator AS excludedScanlator
+FROM mangas JOIN chapters
+ON mangas._id = chapters.manga_id
+LEFT JOIN excluded_scanlators
+ON mangas._id = excluded_scanlators.manga_id
+AND chapters.scanlator = excluded_scanlators.scanlator
+WHERE favorite = 1 AND source <> 6969
+AND date_fetch > date_added
+UNION
+SELECT
+    mangas._id AS mangaId,
+    mangas.title AS mangaTitle,
+    chapters._id AS chapterId,
+    chapters.name AS chapterName,
+    chapters.scanlator,
+    chapters.url AS chapterUrl,
+    chapters.read,
+    chapters.bookmark,
+    chapters.bookmark_color,
+    chapters.last_page_read,
+    mangas.source,
+    mangas.favorite,
+    mangas.thumbnail_url AS thumbnailUrl,
+    mangas.cover_last_modified AS coverLastModified,
+    chapters.date_upload AS dateUpload,
+    chapters.date_fetch AS datefetch,
+    excluded_scanlators.scanlator AS excludedScanlator
+FROM mangas
+LEFT JOIN (
+    SELECT merged.manga_id,merged.merge_id
+    FROM merged
+    GROUP BY merged.merge_id
+) AS ME
+ON ME.merge_id = mangas._id
+JOIN chapters
+ON ME.manga_id = chapters.manga_id
+LEFT JOIN excluded_scanlators
+ON mangas._id = excluded_scanlators.manga_id
+AND chapters.scanlator = excluded_scanlators.scanlator
+WHERE favorite = 1 AND source = 6969
+AND date_fetch > date_added
+ORDER BY datefetch DESC;

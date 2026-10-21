@@ -72,6 +72,12 @@ class SourcePreferences(
 
     // Browse entries the user chose to show again: "sourceId\turl"
     fun shownLibraryMatches() = preferenceStore.getStringSet("pref_custom_shown_library_matches", emptySet())
+
+    // Ask the AI (Settings > Translation) whether near-matching titles are the same series
+    fun aiLibraryMatching() = preferenceStore.getBoolean("pref_custom_ai_library_matching", true)
+
+    // AI answers: "sourceId\turl\tlibraryId\tY|N"
+    fun aiLibraryMatchVerdicts() = preferenceStore.getStringSet("pref_custom_ai_library_match_verdicts", emptySet())
     // KMK <--
     // KMK <--
 

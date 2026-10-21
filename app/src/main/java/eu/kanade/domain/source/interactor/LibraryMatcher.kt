@@ -1,6 +1,11 @@
 package eu.kanade.domain.source.interactor
 
+import eu.kanade.domain.ai.HouriPlusAi
 import eu.kanade.domain.source.service.SourcePreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mihon.app.di.globalAppGraph
@@ -44,9 +49,62 @@ class LibraryMatcher(
         index.remembered[key]?.let { libraryId ->
             if (libraryId in index.libraryTitles) return true
         }
-        val libraryId = index.match(manga) ?: return false
-        remember(manga, libraryId, index)
-        return true
+        val libraryId = index.match(manga)
+        if (libraryId != null) {
+            remember(manga, libraryId, index)
+            return true
+        }
+        // Houri+: titles that nearly match a library title (another translation of the name) are checked
+        // by the AI in the background; a "yes" hides them from then on
+        if (!index.aiEnabled) return false
+        val candidate = index.nearMatch(manga) ?: return false
+        when (index.aiVerdicts[key]) {
+            true -> {
+                remember(manga, candidate, index)
+                return true
+            }
+            false -> return false
+            null -> checkWithAi(manga, candidate, index)
+        }
+        return false
+    }
+
+    private fun checkWithAi(manga: Manga, libraryId: Long, index: Index) {
+        val key = key(manga.source, manga.url)
+        if (!aiInFlight.add(key)) return
+        aiScope.launch {
+            try {
+                val verdict = HouriPlusAi.askYesNo(aiPrompt(manga, libraryId, index)) ?: return@launch
+                index.aiVerdicts[key] = verdict
+                storeMutex.withLock {
+                    val pref = sourcePreferences.aiLibraryMatchVerdicts()
+                    val entry = listOf(manga.source.toString(), manga.url, libraryId.toString(), if (verdict) "Y" else "N")
+                        .joinToString("\t") { it.replace('\t', ' ') }
+                    pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
+                }
+                if (verdict) remember(manga, libraryId, index)
+            } finally {
+                aiInFlight.remove(key)
+            }
+        }
+    }
+
+    private fun aiPrompt(manga: Manga, libraryId: Long, index: Index): String {
+        val names = index.names[libraryId].orEmpty().take(10)
+        val authors = index.authors[libraryId].orEmpty().take(4)
+        val other = buildString {
+            append("\"${manga.title}\"")
+            listOfNotNull(manga.author, manga.artist).filter { it.isNotBlank() }.distinct().takeIf { it.isNotEmpty() }
+                ?.let { append("; author/artist: ${it.joinToString()}") }
+        }
+        return """
+            |Two comic (manga/manhwa/manhua) titles come from different websites. Decide whether they are the same series.
+            |A different English translation or romanization of the title counts as the same series. A sequel, prequel,
+            |spin-off, remake, the novel, or a different story with a similar name does not.
+            |A: "${index.libraryTitles[libraryId]}"; other names: ${names.joinToString("; ")}${if (authors.isNotEmpty()) "; author/artist: ${authors.joinToString()}" else ""}
+            |B: $other
+            |Answer with exactly one word: YES or NO.
+        """.trimMargin()
     }
 
     private suspend fun index(): Index {
@@ -65,10 +123,21 @@ class LibraryMatcher(
         val strongNames = HashMap<String, Long>()
         val weakNames = HashMap<String, MutableSet<Long>>()
         val creators = HashMap<Long, MutableSet<String>>()
+        // Houri+: for near matches checked by the AI
+        val names = HashMap<Long, MutableList<String>>()
+        val authors = HashMap<Long, MutableList<String>>()
+        val tokenIndex = HashMap<String, MutableList<NameTokens>>()
 
-        fun addName(libraryId: Long, name: String?, alternative: Boolean = false) {
-            val normalized = normalizeTitle(name ?: return)
+        fun addName(libraryId: Long, rawName: String?, alternative: Boolean = false) {
+            val name = rawName ?: return
+            val normalized = normalizeTitle(name)
             if (normalized.isEmpty()) return
+            val nameList = names.getOrPut(libraryId) { mutableListOf() }
+            if (name !in nameList) nameList.add(name)
+            significantTokens(normalized).takeIf { it.size >= 2 }?.let { tokens ->
+                val entry = NameTokens(libraryId, tokens)
+                tokens.forEach { tokenIndex.getOrPut(it) { mutableListOf() }.add(entry) }
+            }
             if (isDistinctive(normalized, alternative)) {
                 strongNames.putIfAbsent(normalized, libraryId)
             } else {
@@ -79,6 +148,8 @@ class LibraryMatcher(
         fun addCreators(libraryId: Long, vararg values: String?) {
             val set = creators.getOrPut(libraryId) { mutableSetOf() }
             values.forEach { set.addAll(splitCreators(it)) }
+            val raw = authors.getOrPut(libraryId) { mutableListOf() }
+            values.filterNotNull().filter { it.isNotBlank() && it !in raw }.forEach { raw.add(it) }
         }
 
         favorites.forEach { manga ->
@@ -111,6 +182,14 @@ class LibraryMatcher(
             sourcePreferences.hiddenLibraryMatches().set(kept.toSet())
         }
 
+        // Houri+: AI verdicts on near matches, kept while their library entry is still in the library
+        val aiVerdicts = ConcurrentHashMap<String, Boolean>()
+        sourcePreferences.aiLibraryMatchVerdicts().get().forEach { entry ->
+            val parts = entry.split('\t')
+            val libraryId = parts.getOrNull(2)?.toLongOrNull() ?: return@forEach
+            if (parts.size >= 4 && libraryId in libraryTitles) aiVerdicts[key(parts[0], parts[1])] = parts[3] == "Y"
+        }
+
         return Index(
             libraryTitles = libraryTitles,
             sourceEntries = sourceEntries,
@@ -119,6 +198,11 @@ class LibraryMatcher(
             creators = creators,
             remembered = remembered,
             shown = sourcePreferences.shownLibraryMatches().get(),
+            names = names,
+            authors = authors,
+            tokenIndex = tokenIndex,
+            aiVerdicts = aiVerdicts,
+            aiEnabled = sourcePreferences.aiLibraryMatching().get() && HouriPlusAi.isAvailable(),
         )
     }
 
@@ -146,7 +230,33 @@ class LibraryMatcher(
         val creators: Map<Long, Set<String>>,
         val remembered: MutableMap<String, Long>,
         val shown: Set<String>,
+        val names: Map<Long, List<String>>,
+        val authors: Map<Long, List<String>>,
+        val tokenIndex: Map<String, List<NameTokens>>,
+        val aiVerdicts: MutableMap<String, Boolean>,
+        val aiEnabled: Boolean,
     ) {
+        /**
+         * Houri+: the library entry whose name shares most words with this title (at least two words and half
+         * of all the words in either name), or null. Only a candidate for the AI to confirm.
+         */
+        fun nearMatch(manga: Manga): Long? {
+            val tokens = significantTokens(normalizeTitle(manga.title))
+            if (tokens.size < 2) return null
+            var best: Long? = null
+            var bestScore = 0.0
+            tokens.flatMap { tokenIndex[it].orEmpty() }.distinct().forEach { name ->
+                val overlap = name.tokens.count { it in tokens }
+                if (overlap < 2) return@forEach
+                val score = overlap.toDouble() / (tokens.size + name.tokens.size - overlap)
+                if (score >= 0.5 && score > bestScore) {
+                    best = name.libraryId
+                    bestScore = score
+                }
+            }
+            return best
+        }
+
         fun match(manga: Manga): Long? {
             val normalized = normalizeTitle(manga.title)
             if (normalized.isEmpty()) return null
@@ -169,8 +279,22 @@ class LibraryMatcher(
         val libraryTitle: String,
     )
 
+    private class NameTokens(val libraryId: Long, val tokens: Set<String>)
+
     companion object {
         private val storeMutex = Mutex()
+
+        // Houri+: background AI checks
+        private val aiScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val aiInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
+        private val STOP_WORDS = setOf(
+            "the", "a", "an", "of", "to", "in", "on", "and", "is", "i", "im", "my", "me", "as", "with", "for", "at",
+            "by", "from", "his", "her", "its", "be", "was", "become", "became", "how", "that", "this", "after",
+        )
+
+        /** Houri+: the words of a normalized name that carry meaning. */
+        fun significantTokens(normalized: String): Set<String> =
+            normalized.split(' ').filter { it.length >= 2 && it !in STOP_WORDS }.toSet()
 
         private val COMBINING_MARKS = Regex("[\\u0300-\\u036f]")
         private val APOSTROPHES = Regex("['’‘`´ʼ]")

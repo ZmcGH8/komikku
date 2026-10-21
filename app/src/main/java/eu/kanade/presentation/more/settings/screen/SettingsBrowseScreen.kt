@@ -171,6 +171,13 @@ object SettingsBrowseScreen : SearchableSettings {
                         title = stringResource(KMR.strings.pref_custom_hide_library_matches),
                         subtitle = stringResource(KMR.strings.pref_custom_hide_library_matches_summary),
                     ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = sourcePreferences.aiLibraryMatching(),
+                        title = stringResource(KMR.strings.pref_custom_ai_library_matching),
+                        subtitle = stringResource(KMR.strings.pref_custom_ai_library_matching_summary),
+                        dependsOn = PreferenceDependency(sourcePreferences.hideLibraryMatches()),
+                        mtlOnly = true,
+                    ),
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(KMR.strings.pref_custom_hidden_matches),
                         subtitle = stringResource(KMR.strings.pref_custom_hidden_matches_summary, hiddenMatches.size),

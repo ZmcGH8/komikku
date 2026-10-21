@@ -174,6 +174,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         globalAppGraph.libraryPreferences.mergeOneSourcePerChapter().changes()
             .onEach { MergedChapterDefaults.onePerChapter = it }
             .launchIn(ProcessLifecycleOwner.get().lifecycleScope)
+
+        // Houri+: E-Hentai features are removed; keep them off even after restoring a backup
+        globalAppGraph.exhPreferences.isHentaiEnabled().let { isHentaiEnabled ->
+            isHentaiEnabled.changes()
+                .onEach { if (it) isHentaiEnabled.set(false) }
+                .launchIn(ProcessLifecycleOwner.get().lifecycleScope)
+        }
         // KMK <--
 
         // KMK -->

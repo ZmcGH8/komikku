@@ -22,6 +22,7 @@ import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
 import okhttp3.Response
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
@@ -46,6 +47,7 @@ class MergedSource : HttpSource() {
     // KMK --> Houri+
     private val getMergedChaptersByMangaId: GetMergedChaptersByMangaId by lazy { globalAppGraph.getMergedChaptersByMangaId }
     private val updateChapter: UpdateChapter by lazy { globalAppGraph.updateChapter }
+    private val getChaptersByMangaId: GetChaptersByMangaId by lazy { globalAppGraph.getChaptersByMangaId }
     // KMK <--
 
     override val id: Long = MERGED_SOURCE_ID
@@ -100,9 +102,36 @@ class MergedSource : HttpSource() {
             val dbManga = mangaInfoReference?.run {
                 getManga.await(mangaUrl, mangaSourceId)?.toSManga()
             }
-            (dbManga ?: mergedManga.toSManga()).copy(
+            // KMK --> Houri+: take the status from the merged source that has reached the highest chapter,
+            // so an official source's hiatus doesn't override a scan that is still releasing
+            val infoManga = dbManga ?: mergedManga.toSManga()
+            val furthestSource = mangaReferences
+                .filter { !isMergedSourceId(it.mangaSourceId) }
+                .mapNotNull { getManga.await(it.mangaUrl, it.mangaSourceId) }
+                .maxByOrNull { child ->
+                    getChaptersByMangaId.await(child.id).maxOfOrNull { it.chapterNumber } ?: -1.0
+                }
+            // Refresh that source's details so its status is current
+            val statusFromFurthestSource = furthestSource?.let { child ->
+                val refreshed = try {
+                    updateMangaFromRemote(
+                        source = sourceManager.getOrStub(child.source),
+                        manga = child,
+                        fetchDetails = true,
+                    ).getOrThrow().manga
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    null
+                }
+                refreshed ?: child
+            }
+                ?.status
+                ?.toInt()
+            infoManga.copy(
                 url = manga.url,
+                status = statusFromFurthestSource ?: infoManga.status,
             )
+            // KMK <--
         }
     }
 

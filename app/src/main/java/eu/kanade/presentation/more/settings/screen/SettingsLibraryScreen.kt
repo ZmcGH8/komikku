@@ -315,6 +315,11 @@ object SettingsLibraryScreen : SearchableSettings {
                     title = stringResource(KMR.strings.pref_custom_dedupe_chapter_counts),
                     subtitle = stringResource(KMR.strings.pref_custom_dedupe_chapter_counts_summary),
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.sortIgnoreArticles(),
+                    title = stringResource(KMR.strings.pref_custom_sort_ignore_articles),
+                    subtitle = stringResource(KMR.strings.pref_custom_sort_ignore_articles_summary),
+                ),
                 // KMK <--
             ),
         )

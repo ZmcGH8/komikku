@@ -349,6 +349,11 @@ data object LibraryTab : Tab {
                         getDisplayMode = { screenModel.getDisplayMode() },
                         getColumnsForOrientation = { screenModel.getColumnsForOrientation(it) },
                         getItemsForCategory = { state.getItemsForCategory(it) },
+                        // KMK -->
+                        getSubCategories = { state.subCategoriesByTab[it.id].orEmpty() },
+                        getActiveSubCategoryId = { state.activeSubCategoryId(it) },
+                        onSelectSubCategory = screenModel::selectSubCategory,
+                        // KMK <--
                     )
                 }
             }

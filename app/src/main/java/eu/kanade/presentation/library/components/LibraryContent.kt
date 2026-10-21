@@ -48,6 +48,11 @@ fun LibraryContent(
     getDisplayMode: (Int) -> PreferenceMutableState<LibraryDisplayMode>,
     getColumnsForOrientation: (Boolean) -> PreferenceMutableState<Int>,
     getItemsForCategory: (Category) -> List<LibraryItem>,
+    // KMK -->
+    getSubCategories: (Category) -> List<Category> = { emptyList() },
+    getActiveSubCategoryId: (Category) -> Long? = { null },
+    onSelectSubCategory: (Long?) -> Unit = {},
+    // KMK <--
 ) {
     Column(
         modifier = Modifier.padding(
@@ -86,6 +91,17 @@ fun LibraryContent(
                 },
             )
         }
+
+        // KMK -->
+        // Custom build: pick one sub-category inside a broad-category tab
+        categories.getOrNull(pagerState.currentPage.coerceAtMost(categories.lastIndex))?.let { currentCategory ->
+            LibrarySubCategoryChips(
+                subCategories = getSubCategories(currentCategory),
+                selectedSubCategoryId = getActiveSubCategoryId(currentCategory),
+                onSelectSubCategory = onSelectSubCategory,
+            )
+        }
+        // KMK <--
 
         PullRefresh(
             refreshing = isRefreshing,

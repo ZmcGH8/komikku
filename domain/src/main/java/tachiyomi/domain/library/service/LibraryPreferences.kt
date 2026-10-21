@@ -286,6 +286,9 @@ class LibraryPreferences(
 
     /** Custom build: preferred scanlator order per entry, see [tachiyomi.domain.chapter.model.ScanlatorPriority]. */
     fun scanlatorPriority() = preferenceStore.getString("pref_custom_scanlator_priority", "")
+
+    /** Custom build: sort by name ignoring a leading "The", "A" or "An". */
+    fun sortIgnoreArticles() = preferenceStore.getBoolean("pref_custom_sort_ignore_articles", true)
     // KMK <--
 
     companion object {

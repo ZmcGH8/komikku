@@ -241,6 +241,8 @@
     <!-- Custom build -->
     <string name="pref_custom_dedupe_chapter_counts">Count each chapter once</string>
     <string name="pref_custom_dedupe_chapter_counts_summary">Remaining and total chapter counts ignore duplicates from merged sources and multiple scanlators</string>
+    <string name="pref_custom_sort_ignore_articles">Ignore \"The\", \"A\" and \"An\" when sorting by name</string>
+    <string name="pref_custom_sort_ignore_articles_summary">\"The Novel's Extra\" sorts under N</string>
     <string name="pref_custom_hide_library_matches">Hide library titles on every source</string>
     <string name="pref_custom_hide_library_matches_summary">Hides titles in your library, their merged sources, and the same title on other sources (exact title or alternative-name match). Not applied when searching for a title to migrate or merge</string>
     <string name="pref_custom_hidden_matches">Titles hidden by name match</string>

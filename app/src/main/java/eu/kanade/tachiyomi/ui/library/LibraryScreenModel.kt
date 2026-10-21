@@ -321,6 +321,14 @@ class LibraryScreenModel(
                         state.copy(
                             isLoading = false,
                             groupedFavorites = it,
+                            // KMK -->
+                            subCategoriesByTab = if (state.groupType == LibraryGroup.BY_CATEGORY_GROUP) {
+                                it.keys.associate { tab -> tab.id to categoryGroupMembers[tab.id].orEmpty() }
+                                    .filterValues { members -> members.size > 1 }
+                            } else {
+                                emptyMap()
+                            },
+                            // KMK <--
                         )
                     }
                 }
@@ -683,7 +691,22 @@ class LibraryScreenModel(
     /** Custom build: what a pull-to-refresh on a broad-category or tag tab updates, by tab id. */
     private val groupUpdateExtras = java.util.concurrent.ConcurrentHashMap<Long, String>()
 
-    fun groupUpdateExtra(category: Category): String? = groupUpdateExtras[category.id]
+    fun groupUpdateExtra(category: Category): String? {
+        // A sub-category picked inside a broad category refreshes only that sub-category
+        val subCategoryId = state.value.activeSubCategoryId
+        if (subCategoryId != null && state.value.subCategoriesByTab[category.id]?.any { it.id == subCategoryId } == true) {
+            return subCategoryId.toString()
+        }
+        return groupUpdateExtras[category.id]
+    }
+
+    /** Custom build: sub-categories of each broad-category tab (by tab id). */
+    private val categoryGroupMembers = java.util.concurrent.ConcurrentHashMap<Long, List<Category>>()
+
+    /** Custom build: show only one sub-category inside a broad-category tab (null = all of them). */
+    fun selectSubCategory(subCategoryId: Long?) {
+        mutableState.update { it.copy(activeSubCategoryId = subCategoryId) }
+    }
 
     /**
      * Custom build: one tab per broad category with every entry of its sub-categories, followed by the
@@ -718,6 +741,7 @@ class LibraryScreenModel(
                 hidden = false,
             )
             groupUpdateExtras[tab.id] = members.joinToString(",") { it.id.toString() }
+            categoryGroupMembers[tab.id] = members
             result[tab] = members.flatMap { itemsByCategory[it.id].orEmpty() }.distinct()
         }
         visible.filter { it.id !in inGroup }.forEach { category ->
@@ -888,9 +912,19 @@ class LibraryScreenModel(
         }
         // SY <--
 
+        // KMK -->
+        // Custom build: optionally ignore a leading "The", "A" or "An" (Yokai-style)
+        val ignoreArticles = libraryPreferences.sortIgnoreArticles().get()
+        // KMK <--
         val sortAlphabetically: (LibraryItem, LibraryItem) -> Int = { manga1, manga2 ->
             val title1 = manga1.libraryManga.manga.title.lowercase()
+                // KMK -->
+                .let { if (ignoreArticles) it.replaceFirst(LEADING_ARTICLE, "") else it }
+            // KMK <--
             val title2 = manga2.libraryManga.manga.title.lowercase()
+                // KMK -->
+                .let { if (ignoreArticles) it.replaceFirst(LEADING_ARTICLE, "") else it }
+            // KMK <--
             title1.compareToWithCollator(title2)
         }
 
@@ -2028,6 +2062,9 @@ class LibraryScreenModel(
         val filterCategory: Boolean = false,
         val includedCategories: ImmutableSet<Long> = persistentSetOf(),
         val excludedCategories: ImmutableSet<Long> = persistentSetOf(),
+        // Custom build: sub-categories of each broad-category tab, and the one picked (null = all)
+        val subCategoriesByTab: Map<Long, List<Category>> = emptyMap(),
+        val activeSubCategoryId: Long? = null,
         // KMK <--
     ) {
         /**
@@ -2084,12 +2121,28 @@ class LibraryScreenModel(
         }
 
         fun getItemsForCategory(category: Category): List<LibraryItem> {
+            // KMK -->
+            val subCategoryId = activeSubCategoryId(category)
+            // KMK <--
             return groupedFavorites[category].orEmpty().fastMapNotNull { libraryData.favoritesById[it] }
+                // KMK -->
+                .let { items ->
+                    if (subCategoryId == null) items else items.filter { subCategoryId in it.libraryManga.categories }
+                }
+            // KMK <--
         }
 
         fun getItemCountForCategory(category: Category): Int? {
             return if (showMangaCount || !searchQuery.isNullOrEmpty()) groupedFavorites[category]?.size else null
         }
+
+        // KMK -->
+        /** Custom build: the sub-category picked inside [category], if it's a broad category. */
+        fun activeSubCategoryId(category: Category): Long? {
+            val subCategoryId = activeSubCategoryId ?: return null
+            return subCategoryId.takeIf { subCategoriesByTab[category.id]?.any { it.id == subCategoryId } == true }
+        }
+        // KMK <--
 
         fun getToolbarTitle(
             defaultTitle: String,
@@ -2122,6 +2175,7 @@ class LibraryScreenModel(
         private const val STUDIO_TAB_ID = 6_000_000_000L
 
         private val AUTHOR_SEPARATORS = Regex("""\s*[,;/&]\s*""")
+        private val LEADING_ARTICLE = Regex("""^(the|an?)\s+""")
 
         /** Custom build: author names from a manga's author field ("A, B & C" -> A, B, C). */
         fun splitAuthors(author: String?): List<String> {

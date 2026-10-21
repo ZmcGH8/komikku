@@ -27,6 +27,7 @@ import eu.kanade.presentation.theme.colorscheme.AndroidViewColorScheme
 import eu.kanade.tachiyomi.databinding.EditMergedSettingsDialogBinding
 import eu.kanade.tachiyomi.ui.manga.MergedMangaData
 import eu.kanade.tachiyomi.util.system.toast
+import exh.source.MERGED_SOURCE_ID
 import exh.source.isMergedSourceId
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MergedMangaReference
@@ -66,6 +67,24 @@ class EditMergedSettingsState(
             !isMergedSourceId(it.mangaSourceId)
         }.map { reference -> mergedManga.firstOrNull { it.id == reference.mangaId } to reference }
         mergeReference = mergedReferences.firstOrNull { isMergedSourceId(it.mangaSourceId) }
+            // KMK --> Houri+: some merges lack the reference for the merge itself, which holds the dedupe
+            // setting. Make one (id -1) so dedupe can be turned on; it's inserted when the settings are saved.
+            ?: mergedReferences.firstOrNull()?.let { child ->
+                MergedMangaReference(
+                    id = -1,
+                    isInfoManga = false,
+                    getChapterUpdates = false,
+                    chapterSortMode = MergedMangaReference.CHAPTER_SORT_NONE,
+                    chapterPriority = -1,
+                    downloadChapters = false,
+                    mergeId = child.mergeId,
+                    mergeUrl = child.mergeUrl,
+                    mangaId = child.mergeId,
+                    mangaUrl = child.mergeUrl,
+                    mangaSourceId = MERGED_SOURCE_ID,
+                )
+            }
+        // KMK <--
 
         val isPriorityOrder =
             mergeReference?.let { it.chapterSortMode == MergedMangaReference.CHAPTER_SORT_PRIORITY } ?: false

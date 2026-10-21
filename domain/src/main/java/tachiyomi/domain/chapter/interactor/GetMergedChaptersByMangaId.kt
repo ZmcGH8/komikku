@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.flowOf
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.model.MergedChapterDefaults
 import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.manga.interactor.GetMergedReferencesById
 import tachiyomi.domain.manga.model.MergedMangaReference
@@ -73,9 +74,20 @@ class GetMergedChaptersByMangaId(
         mangaReferences: List<MergedMangaReference>,
         chapterList: List<Chapter>,
     ): List<Chapter> {
-        return when (mangaReferences.firstOrNull { it.mangaSourceId == MERGED_SOURCE_ID }?.chapterSortMode) {
+        // KMK --> Houri+: one source per chapter unless the merge picked another mode
+        val sortMode = mangaReferences.firstOrNull { it.mangaSourceId == MERGED_SOURCE_ID }?.chapterSortMode
+        if (MergedChapterDefaults.onePerChapter && (sortMode == null || sortMode == MergedMangaReference.CHAPTER_SORT_NONE)) {
+            return dedupeByPriority(MergedChapterDefaults.withDefaultPriority(mangaReferences), chapterList)
+        }
+        // KMK <--
+        return when (/* KMK --> */ sortMode /* KMK <-- */) {
             MergedMangaReference.CHAPTER_SORT_NONE -> chapterList
-            MergedMangaReference.CHAPTER_SORT_PRIORITY -> dedupeByPriority(mangaReferences, chapterList)
+            MergedMangaReference.CHAPTER_SORT_PRIORITY -> dedupeByPriority(
+                // KMK -->
+                MergedChapterDefaults.withDefaultPriority(mangaReferences),
+                // KMK <--
+                chapterList,
+            )
             MergedMangaReference.CHAPTER_SORT_MOST_CHAPTERS -> {
                 findSourceWithMostChapters(chapterList)?.let { mangaId ->
                     chapterList.filter { it.mangaId == mangaId }

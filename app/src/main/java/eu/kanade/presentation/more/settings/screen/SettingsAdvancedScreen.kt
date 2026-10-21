@@ -508,6 +508,12 @@ object SettingsAdvancedScreen : SearchableSettings {
                     subtitle = stringResource(KMR.strings.pref_show_smart_scanlator_details_summary),
                     dependsOn = PreferenceDependency(libraryPreferences.smartScanlatorMerge()),
                 ),
+                // Houri+: merged entries show each chapter from one source
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.mergeOneSourcePerChapter(),
+                    title = stringResource(KMR.strings.pref_custom_merge_one_source_per_chapter),
+                    subtitle = stringResource(KMR.strings.pref_custom_merge_one_source_per_chapter_summary),
+                ),
                 // KMK <--
             ),
         )

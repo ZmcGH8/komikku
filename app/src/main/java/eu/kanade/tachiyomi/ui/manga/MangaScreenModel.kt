@@ -829,6 +829,27 @@ class MangaScreenModel(
 
     fun updateMergeSettings(mergedMangaReferences: List<MergedMangaReference>) {
         screenModelScope.launchNonCancellable {
+            // KMK --> Houri+: insert the merge's own reference when it was missing (made by the settings dialog)
+            mergedMangaReferences.filter { it.id == -1L }.forEach { reference ->
+                val mergeId = reference.mergeId ?: return@forEach
+                globalAppGraph.databaseHandler.await {
+                    mergedQueries.insert(
+                        infoManga = reference.isInfoManga,
+                        getChapterUpdates = reference.getChapterUpdates,
+                        chapterSortMode = reference.chapterSortMode.toLong(),
+                        chapterPriority = reference.chapterPriority.toLong(),
+                        downloadChapters = reference.downloadChapters,
+                        mergeId = mergeId,
+                        mergeUrl = reference.mergeUrl,
+                        mangaId = reference.mangaId,
+                        mangaUrl = reference.mangaUrl,
+                        mangaSource = reference.mangaSourceId,
+                    )
+                }
+            }
+            @Suppress("NAME_SHADOWING")
+            val mergedMangaReferences = mergedMangaReferences.filter { it.id != -1L }
+            // KMK <--
             if (mergedMangaReferences.isNotEmpty()) {
                 updateMergedSettings.awaitAll(
                     mergedMangaReferences.map {

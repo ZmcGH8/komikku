@@ -103,6 +103,7 @@ import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.chapter.model.MergedChapterDefaults
 import tachiyomi.domain.manga.model.CustomMangaInfoLookup
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.i18n.MR
@@ -166,6 +167,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         // KMK --> single AppDispatchers instance for GlobalScope helpers + DI
         mihon.core.concurrency.AppDispatchersHolder.set(globalAppGraph.appDispatchers)
+        // KMK <--
+
+        // KMK --> Houri+: one source per chapter in merged entries (official sources first)
+        MergedChapterDefaults.sourceName = { sourceId -> globalAppGraph.sourceManager.get(sourceId)?.name }
+        globalAppGraph.libraryPreferences.mergeOneSourcePerChapter().changes()
+            .onEach { MergedChapterDefaults.onePerChapter = it }
+            .launchIn(ProcessLifecycleOwner.get().lifecycleScope)
         // KMK <--
 
         // KMK -->

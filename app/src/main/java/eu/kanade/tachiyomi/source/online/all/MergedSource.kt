@@ -22,7 +22,11 @@ import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
 import okhttp3.Response
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
+import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.model.ChapterUpdate
+import tachiyomi.domain.chapter.model.MergedChapterDefaults
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.GetMergedReferencesById
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
@@ -38,6 +42,11 @@ class MergedSource : HttpSource() {
     private val sourceManager: SourceManager by lazy { globalAppGraph.sourceManager }
     private val downloadManager: DownloadManager by lazy { globalAppGraph.downloadManager }
     private val filterChaptersForDownload: FilterChaptersForDownload by lazy { globalAppGraph.filterChaptersForDownload }
+
+    // KMK --> Houri+
+    private val getMergedChaptersByMangaId: GetMergedChaptersByMangaId by lazy { globalAppGraph.getMergedChaptersByMangaId }
+    private val updateChapter: UpdateChapter by lazy { globalAppGraph.updateChapter }
+    // KMK <--
 
     override val id: Long = MERGED_SOURCE_ID
 
@@ -147,9 +156,33 @@ class MergedSource : HttpSource() {
                 .awaitAll()
                 .flatten()
         }.also {
+            // KMK --> Houri+: keep read chapters read when another source's copy takes their place
+            if (MergedChapterDefaults.onePerChapter) {
+                try {
+                    markReadAcrossSources(manga.id)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
+            }
+            // KMK <--
             exception?.let { throw it }
         }
     }
+
+    // KMK -->
+    /**
+     * Houri+: with one source per chapter, a chapter read on one source (e.g. the scan) is shown from another
+     * once that one has it (e.g. the official release). Mark those copies read too so progress isn't lost.
+     */
+    private suspend fun markReadAcrossSources(mergeId: Long) {
+        val chapters = getMergedChaptersByMangaId.await(mergeId, dedupe = false)
+        val readNumbers = chapters.filter { it.read && it.isRecognizedNumber }.mapTo(HashSet()) { it.chapterNumber }
+        val updates = chapters
+            .filter { !it.read && it.isRecognizedNumber && it.chapterNumber in readNumbers }
+            .map { ChapterUpdate(id = it.id, read = true) }
+        if (updates.isNotEmpty()) updateChapter.awaitAll(updates)
+    }
+    // KMK <--
 
     suspend fun MergedMangaReference.load(): LoadedMangaSource {
         var manga = getManga.await(mangaUrl, mangaSourceId)

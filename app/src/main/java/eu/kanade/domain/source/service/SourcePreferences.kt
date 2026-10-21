@@ -70,6 +70,10 @@ class SourcePreferences(
     // Browse entries hidden by a name match: "sourceId\turl\tlibraryId\tbrowseTitle\tlibraryTitle"
     fun hiddenLibraryMatches() = preferenceStore.getStringSet("pref_custom_hidden_library_matches", emptySet())
 
+    // Browse entries that look like a library title but need the user's confirmation:
+    // "sourceId\turl\tlibraryId\tbrowseTitle\tlibraryTitle\tmangaId\treason\tsourceAuthor\tlibraryAuthor"
+    fun libraryMatchReview() = preferenceStore.getStringSet("pref_custom_library_match_review", emptySet())
+
     // Browse entries the user chose to show again: "sourceId\turl"
     fun shownLibraryMatches() = preferenceStore.getStringSet("pref_custom_shown_library_matches", emptySet())
 

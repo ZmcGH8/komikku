@@ -1,9 +1,11 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -15,27 +17,34 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.source.interactor.LibraryMatcher
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.PreferenceDependency
 import eu.kanade.presentation.more.settings.screen.browse.ExtensionStoresScreen
 import eu.kanade.tachiyomi.ui.category.sources.SourceCategoryScreen
+import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import kotlinx.collections.immutable.persistentListOf
 import mihon.app.di.globalAppGraph
 import mihon.domain.extension.interactor.GetExtensionStoreCountAsFlow
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.manga.model.asMangaCover
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
@@ -71,6 +80,19 @@ object SettingsBrowseScreen : SearchableSettings {
             HiddenLibraryMatchesDialog(
                 sourcePreferences = sourcePreferences,
                 onDismissRequest = { showHiddenMatches = false },
+            )
+        }
+        // Titles that look like library titles and wait for the user to confirm
+        val reviewItems by sourcePreferences.libraryMatchReview().collectAsState()
+        var showReview by remember { mutableStateOf(false) }
+        if (showReview) {
+            LibraryMatchReviewDialog(
+                sourcePreferences = sourcePreferences,
+                onOpenEntry = { mangaId ->
+                    showReview = false
+                    navigator.push(MangaScreen(mangaId))
+                },
+                onDismissRequest = { showReview = false },
             )
         }
         // KMK <--
@@ -179,6 +201,11 @@ object SettingsBrowseScreen : SearchableSettings {
                         mtlOnly = true,
                     ),
                     Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.pref_custom_match_review),
+                        subtitle = stringResource(KMR.strings.pref_custom_match_review_summary, reviewItems.size),
+                        onClick = { showReview = true },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
                         title = stringResource(KMR.strings.pref_custom_hidden_matches),
                         subtitle = stringResource(KMR.strings.pref_custom_hidden_matches_summary, hiddenMatches.size),
                         onClick = { showHiddenMatches = true },
@@ -273,5 +300,108 @@ private fun HiddenLibraryMatchesDialog(
         },
     )
 }
-// KMK <--
 
+/** Houri+: titles that look like library titles but don't match on both name and author, for the user to decide. */
+@Composable
+private fun LibraryMatchReviewDialog(
+    sourcePreferences: SourcePreferences,
+    onOpenEntry: (Long) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    val sourceManager = remember { globalAppGraph.sourceManager }
+    val entries by sourcePreferences.libraryMatchReview().collectAsState()
+    val reviewList = remember(entries) {
+        LibraryMatcher.parseReviewItems(entries)
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER, LibraryMatcher.ReviewItem::libraryTitle))
+    }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(text = stringResource(KMR.strings.pref_custom_match_review)) },
+        text = {
+            if (reviewList.isEmpty()) {
+                Text(text = stringResource(KMR.strings.pref_custom_match_review_empty))
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(
+                        items = reviewList,
+                        key = { "${it.sourceId}\t${it.url}" },
+                    ) { item ->
+                        val sourceManga by produceState<Manga?>(null, item.mangaId) {
+                            value = item.mangaId?.let { globalAppGraph.getManga.await(it) }
+                        }
+                        val libraryManga by produceState<Manga?>(null, item.libraryId) {
+                            value = globalAppGraph.getManga.await(item.libraryId)
+                        }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                MangaCover.Book(
+                                    data = sourceManga?.asMangaCover(),
+                                    modifier = Modifier.width(56.dp),
+                                    onClick = item.mangaId?.let { id -> { onOpenEntry(id) } },
+                                )
+                                MangaCover.Book(
+                                    data = libraryManga?.asMangaCover(),
+                                    modifier = Modifier.width(56.dp),
+                                    onClick = { onOpenEntry(item.libraryId) },
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = listOfNotNull(
+                                            sourceManager.getOrStub(item.sourceId).name,
+                                            item.sourceAuthor.takeIf { it.isNotBlank() }
+                                                ?.let { stringResource(KMR.strings.custom_match_review_by, it) },
+                                        ).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        text = listOfNotNull(
+                                            stringResource(KMR.strings.custom_match_review_in_library, item.libraryTitle),
+                                            item.libraryAuthor.takeIf { it.isNotBlank() }
+                                                ?.let { stringResource(KMR.strings.custom_match_review_by, it) },
+                                        ).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    Text(
+                                        text = stringResource(reviewReason(item.reason)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                TextButton(onClick = { LibraryMatcher.rejectReview(sourcePreferences, item) }) {
+                                    Text(text = stringResource(KMR.strings.action_custom_match_different))
+                                }
+                                TextButton(onClick = { LibraryMatcher.confirmReview(sourcePreferences, item) }) {
+                                    Text(text = stringResource(KMR.strings.action_custom_match_same))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_close))
+            }
+        },
+    )
+}
+
+private fun reviewReason(reason: String): StringResource = when (reason) {
+    LibraryMatcher.REASON_SAME_NAME_OTHER_AUTHOR -> KMR.strings.custom_match_review_reason_author
+    LibraryMatcher.REASON_SAME_NAME_NO_AUTHOR -> KMR.strings.custom_match_review_reason_noauthor
+    LibraryMatcher.REASON_SIMILAR_NAME_SAME_AUTHOR -> KMR.strings.custom_match_review_reason_similar
+    else -> KMR.strings.custom_match_review_reason_ai
+}
+// KMK <--

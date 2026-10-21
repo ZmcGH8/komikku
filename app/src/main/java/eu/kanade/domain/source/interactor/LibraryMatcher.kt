@@ -1,41 +1,58 @@
 package eu.kanade.domain.source.interactor
 
 import eu.kanade.domain.ai.HouriPlusAi
+import eu.kanade.domain.manga.model.toSManga
 import eu.kanade.domain.source.service.SourcePreferences
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
+import logcat.LogPriority
 import mihon.app.di.globalAppGraph
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.DatabaseHandler
+import tachiyomi.domain.library.model.creditsFromDescription
 import tachiyomi.domain.manga.interactor.GetFavorites
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.source.service.SourceManager
 import java.text.Normalizer
 import java.util.concurrent.ConcurrentHashMap
 
 // KMK -->
 /**
- * Custom build: decides whether an entry shown by a source is a title that is already in the library,
+ * Houri+ (custom build): decides whether an entry shown by a source is a title that is already in the library,
  * even when it comes from a different source than the library entry.
  *
- * Matching is strict on purpose, so unrelated titles are never hidden:
- * 1. The same source entry as a library entry, or as one of the sources merged into a library entry.
- * 2. An entry hidden earlier by a name match (remembered, so it doesn't have to be matched again),
- *    as long as its library entry is still in the library.
- * 3. The entry's whole title is exactly one of the library entry's names (display title, source title,
- *    merged sources' titles, or the "Alternative Names" in its description) after ignoring case, accents and
- *    punctuation, and that name is distinctive: four CJK characters, or at least two words and ten letters
- *    (three words and fourteen letters for alternative names, which are often loose translations).
- *    Shorter names (e.g. "Hero", "Hero Returns") only match when the author or artist matches as well.
+ * An entry is hidden only when:
+ * 1. it is the same source entry as a library entry, or as one of the sources merged into a library entry;
+ * 2. the user confirmed it (or it was matched before) and its library entry is still in the library; or
+ * 3. its whole title is exactly one of the library entry's names (display title, source title, merged
+ *    sources' titles, or the "Alternative Names" in its description) after ignoring case, accents and
+ *    punctuation, AND its author or artist is one of the library entry's creators. When the source's list
+ *    doesn't include the author, the entry's details are fetched once to get it.
  *
- * Entries the user marked "show again" are never hidden.
+ * Entries that look like the same title but don't match on both name and author go to a review list
+ * instead, and stay visible until the user confirms them:
+ * - the same name with a different (or no) author;
+ * - a similar name (most words shared) with the same author, or that the AI (Settings → Translation)
+ *   says is the same series.
+ *
+ * Entries the user marked "not the same" or "show again" are never hidden.
  */
 class LibraryMatcher(
     private val handler: DatabaseHandler = globalAppGraph.databaseHandler,
     private val getFavorites: GetFavorites = globalAppGraph.getFavorites,
     private val sourcePreferences: SourcePreferences = globalAppGraph.sourcePreferences,
+    private val sourceManager: SourceManager = globalAppGraph.sourceManager,
 ) {
     private val indexMutex = Mutex()
     private var index: Index? = null
@@ -49,30 +66,82 @@ class LibraryMatcher(
         index.remembered[key]?.let { libraryId ->
             if (libraryId in index.libraryTitles) return true
         }
-        val libraryId = index.match(manga)
-        if (libraryId != null) {
-            remember(manga, libraryId, index)
-            return true
-        }
-        // Houri+: titles that nearly match a library title (another translation of the name) are checked
-        // by the AI in the background; a "yes" hides them from then on
-        if (!index.aiEnabled) return false
-        val candidate = index.nearMatch(manga) ?: return false
-        when (index.aiVerdicts[key]) {
-            true -> {
-                remember(manga, candidate, index)
-                return true
+        // Waiting for the user to confirm
+        if (key in index.reviewKeys) return false
+
+        val sameName = index.sameName(manga)
+        if (sameName.isNotEmpty()) {
+            // Started only once it is stored, so its clean-up can't run before it is stored
+            val check = nameChecks.getOrPut(key) {
+                checkScope.async(start = CoroutineStart.LAZY) { checkSameName(manga, sameName, index) }
             }
-            false -> return false
-            null -> checkWithAi(manga, candidate, index)
+            check.start()
+            // Usually done within a moment; when the source is slow the entry shows now and is hidden next time
+            return withTimeoutOrNull(NAME_CHECK_WAIT_MS) { check.await() } ?: false
+        }
+
+        val candidate = index.nearMatch(manga) ?: return false
+        val listedCreators = creatorsOf(manga.author, manga.artist)
+        if (listedCreators.isNotEmpty() && index.creators[candidate].orEmpty().any { it in listedCreators }) {
+            addToReview(manga, candidate, index, REASON_SIMILAR_NAME_SAME_AUTHOR, listedCreators)
+            return false
+        }
+        if (index.aiEnabled && index.aiVerdicts[key] == null) {
+            checkWithAi(manga, candidate, index)
         }
         return false
+    }
+
+    /**
+     * Hidden right away when the author also matches; otherwise the entry goes to the review list.
+     * Returns whether to hide it.
+     */
+    private suspend fun checkSameName(manga: Manga, sameName: Set<Long>, index: Index): Boolean {
+        val key = key(manga.source, manga.url)
+        try {
+            var creators = creatorsOf(manga.author, manga.artist)
+            if (creators.isEmpty()) {
+                // The source's list didn't include the author: read it from the entry's details (once)
+                creators = fetchCreators(manga) ?: return false
+            }
+            val match = sameName.firstOrNull { libraryId -> index.creators[libraryId].orEmpty().any { it in creators } }
+            if (match != null) {
+                remember(manga, match, index)
+                return true
+            }
+            val reason = if (creators.isEmpty()) REASON_SAME_NAME_NO_AUTHOR else REASON_SAME_NAME_OTHER_AUTHOR
+            addToReview(manga, sameName.first(), index, reason, creators)
+            return false
+        } finally {
+            // Decided (or failed): the next look comes from the stored lists, or retries after a failure
+            nameChecks.remove(key)
+        }
+    }
+
+    /** The source's author/artist for this entry, or null when the details couldn't be loaded. */
+    private suspend fun fetchCreators(manga: Manga): Set<String>? {
+        val source = sourceManager.get(manga.source) ?: return null
+        return try {
+            detailsSemaphore.withPermit {
+                val details = source.getMangaUpdate(
+                    manga = manga.toSManga(),
+                    chapters = emptyList(),
+                    fetchDetails = true,
+                    fetchChapters = false,
+                ).manga
+                creatorsOf(details.author, details.artist)
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logcat(LogPriority.WARN, e) { "Houri+: couldn't load details of ${manga.title} to compare authors" }
+            null
+        }
     }
 
     private fun checkWithAi(manga: Manga, libraryId: Long, index: Index) {
         val key = key(manga.source, manga.url)
         if (!aiInFlight.add(key)) return
-        aiScope.launch {
+        checkScope.launch {
             try {
                 val verdict = HouriPlusAi.askYesNo(aiPrompt(manga, libraryId, index)) ?: return@launch
                 index.aiVerdicts[key] = verdict
@@ -82,7 +151,9 @@ class LibraryMatcher(
                         .joinToString("\t") { it.replace('\t', ' ') }
                     pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
                 }
-                if (verdict) remember(manga, libraryId, index)
+                if (verdict) {
+                    addToReview(manga, libraryId, index, REASON_SIMILAR_NAME_AI, creatorsOf(manga.author, manga.artist))
+                }
             } finally {
                 aiInFlight.remove(key)
             }
@@ -120,34 +191,28 @@ class LibraryMatcher(
 
         val libraryTitles = favorites.associate { it.id to it.title }
         val sourceEntries = HashMap<String, Long>()
-        val strongNames = HashMap<String, Long>()
-        val weakNames = HashMap<String, MutableSet<Long>>()
+        val nameIndex = HashMap<String, MutableSet<Long>>()
         val creators = HashMap<Long, MutableSet<String>>()
-        // Houri+: for near matches checked by the AI
+        // For the AI and the review list
         val names = HashMap<Long, MutableList<String>>()
         val authors = HashMap<Long, MutableList<String>>()
         val tokenIndex = HashMap<String, MutableList<NameTokens>>()
 
-        fun addName(libraryId: Long, rawName: String?, alternative: Boolean = false) {
+        fun addName(libraryId: Long, rawName: String?) {
             val name = rawName ?: return
             val normalized = normalizeTitle(name)
             if (normalized.isEmpty()) return
             val nameList = names.getOrPut(libraryId) { mutableListOf() }
             if (name !in nameList) nameList.add(name)
+            nameIndex.getOrPut(normalized) { mutableSetOf() }.add(libraryId)
             significantTokens(normalized).takeIf { it.size >= 2 }?.let { tokens ->
                 val entry = NameTokens(libraryId, tokens)
                 tokens.forEach { tokenIndex.getOrPut(it) { mutableListOf() }.add(entry) }
             }
-            if (isDistinctive(normalized, alternative)) {
-                strongNames.putIfAbsent(normalized, libraryId)
-            } else {
-                weakNames.getOrPut(normalized) { mutableSetOf() }.add(libraryId)
-            }
         }
 
-        fun addCreators(libraryId: Long, vararg values: String?) {
-            val set = creators.getOrPut(libraryId) { mutableSetOf() }
-            values.forEach { set.addAll(splitCreators(it)) }
+        fun addCreators(libraryId: Long, values: List<String?>) {
+            creators.getOrPut(libraryId) { mutableSetOf() }.addAll(creatorsOf(*values.toTypedArray()))
             val raw = authors.getOrPut(libraryId) { mutableListOf() }
             values.filterNotNull().filter { it.isNotBlank() && it !in raw }.forEach { raw.add(it) }
         }
@@ -156,33 +221,28 @@ class LibraryMatcher(
             sourceEntries[key(manga.source, manga.url)] = manga.id
             addName(manga.id, manga.title)
             addName(manga.id, manga.ogTitle)
-            alternativeNames(manga.description).forEach { addName(manga.id, it, alternative = true) }
-            addCreators(manga.id, manga.author, manga.artist, manga.ogAuthor, manga.ogArtist)
+            alternativeNames(manga.description).forEach { addName(manga.id, it) }
+            addCreators(manga.id, listOf(manga.author, manga.artist, manga.ogAuthor, manga.ogArtist))
+            // Writers, artists and studios listed under "Credits" in the description
+            addCreators(manga.id, creditsFromDescription(manga.description) { true })
         }
         mergeChildren.forEach { child ->
             sourceEntries[key(child.sourceId, child.url)] = child.libraryId
             addName(child.libraryId, child.title)
-            addCreators(child.libraryId, child.author, child.artist)
+            addCreators(child.libraryId, listOf(child.author, child.artist))
         }
 
-        // Forget remembered matches whose library entry was removed from the library
-        val stored = sourcePreferences.hiddenLibraryMatches().get()
+        // Forget remembered matches and review items whose library entry was removed from the library
         val remembered = ConcurrentHashMap<String, Long>()
-        val kept = stored.filter { entry ->
-            val parts = entry.split('\t')
-            val libraryId = parts.getOrNull(2)?.toLongOrNull()
-            if (parts.size >= 3 && libraryId != null && libraryId in libraryTitles) {
-                remembered[key(parts[0], parts[1])] = libraryId
-                true
-            } else {
-                false
-            }
-        }
-        if (kept.size != stored.size) {
-            sourcePreferences.hiddenLibraryMatches().set(kept.toSet())
-        }
+        prune(sourcePreferences.hiddenLibraryMatches().get(), libraryTitles.keys) { kept ->
+            sourcePreferences.hiddenLibraryMatches().set(kept)
+        }.forEach { (key, libraryId) -> remembered[key] = libraryId }
+        val reviewKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+        prune(sourcePreferences.libraryMatchReview().get(), libraryTitles.keys) { kept ->
+            sourcePreferences.libraryMatchReview().set(kept)
+        }.forEach { (key, _) -> reviewKeys.add(key) }
 
-        // Houri+: AI verdicts on near matches, kept while their library entry is still in the library
+        // AI answers on near matches, kept while their library entry is still in the library
         val aiVerdicts = ConcurrentHashMap<String, Boolean>()
         sourcePreferences.aiLibraryMatchVerdicts().get().forEach { entry ->
             val parts = entry.split('\t')
@@ -193,10 +253,10 @@ class LibraryMatcher(
         return Index(
             libraryTitles = libraryTitles,
             sourceEntries = sourceEntries,
-            strongNames = strongNames,
-            weakNames = weakNames,
+            nameIndex = nameIndex,
             creators = creators,
             remembered = remembered,
+            reviewKeys = reviewKeys,
             shown = sourcePreferences.shownLibraryMatches().get(),
             names = names,
             authors = authors,
@@ -204,6 +264,27 @@ class LibraryMatcher(
             aiVerdicts = aiVerdicts,
             aiEnabled = sourcePreferences.aiLibraryMatching().get() && HouriPlusAi.isAvailable(),
         )
+    }
+
+    /** Entries ("sourceId\turl\tlibraryId\t…") whose library entry still exists, as key to library id. */
+    private fun prune(
+        stored: Set<String>,
+        libraryIds: Set<Long>,
+        save: (Set<String>) -> Unit,
+    ): List<Pair<String, Long>> {
+        val result = mutableListOf<Pair<String, Long>>()
+        val kept = stored.filter { entry ->
+            val parts = entry.split('\t')
+            val libraryId = parts.getOrNull(2)?.toLongOrNull()
+            if (parts.size >= 3 && libraryId != null && libraryId in libraryIds) {
+                result += key(parts[0], parts[1]) to libraryId
+                true
+            } else {
+                false
+            }
+        }
+        if (kept.size != stored.size) save(kept.toSet())
+        return result
     }
 
     private suspend fun remember(manga: Manga, libraryId: Long, index: Index) {
@@ -217,7 +298,30 @@ class LibraryMatcher(
                 libraryId.toString(),
                 manga.title,
                 index.libraryTitles[libraryId].orEmpty(),
-            ).joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') }
+            ).joinToString("\t") { it.clean() }
+            pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
+        }
+    }
+
+    private suspend fun addToReview(manga: Manga, libraryId: Long, index: Index, reason: String, creators: Set<String>) {
+        val key = key(manga.source, manga.url)
+        index.reviewKeys.add(key)
+        val sourceAuthor = listOfNotNull(manga.author, manga.artist).filter { it.isNotBlank() }.distinct()
+            .joinToString()
+            .ifEmpty { creators.joinToString() }
+        storeMutex.withLock {
+            val pref = sourcePreferences.libraryMatchReview()
+            val entry = listOf(
+                manga.source.toString(),
+                manga.url,
+                libraryId.toString(),
+                manga.title,
+                index.libraryTitles[libraryId].orEmpty(),
+                manga.id.toString(),
+                reason,
+                sourceAuthor,
+                index.authors[libraryId].orEmpty().take(3).joinToString(),
+            ).joinToString("\t") { it.clean() }
             pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
         }
     }
@@ -225,10 +329,10 @@ class LibraryMatcher(
     private class Index(
         val libraryTitles: Map<Long, String>,
         val sourceEntries: Map<String, Long>,
-        val strongNames: Map<String, Long>,
-        val weakNames: Map<String, Set<Long>>,
+        val nameIndex: Map<String, Set<Long>>,
         val creators: Map<Long, Set<String>>,
         val remembered: MutableMap<String, Long>,
+        val reviewKeys: MutableSet<String>,
         val shown: Set<String>,
         val names: Map<Long, List<String>>,
         val authors: Map<Long, List<String>>,
@@ -236,9 +340,16 @@ class LibraryMatcher(
         val aiVerdicts: MutableMap<String, Boolean>,
         val aiEnabled: Boolean,
     ) {
+        /** Library entries with a name identical to this entry's title (ignoring case, accents and punctuation). */
+        fun sameName(manga: Manga): Set<Long> {
+            val normalized = normalizeTitle(manga.title)
+            if (normalized.isEmpty()) return emptySet()
+            return nameIndex[normalized].orEmpty()
+        }
+
         /**
-         * Houri+: the library entry whose name shares most words with this title (at least two words and half
-         * of all the words in either name), or null. Only a candidate for the AI to confirm.
+         * The library entry whose name shares most words with this title (at least two words and half of all
+         * the words in either name), or null. Only a candidate for the review list.
          */
         fun nearMatch(manga: Manga): Long? {
             val tokens = significantTokens(normalizeTitle(manga.title))
@@ -256,19 +367,6 @@ class LibraryMatcher(
             }
             return best
         }
-
-        fun match(manga: Manga): Long? {
-            val normalized = normalizeTitle(manga.title)
-            if (normalized.isEmpty()) return null
-            strongNames[normalized]?.let { return it }
-
-            val candidates = weakNames[normalized] ?: return null
-            val mangaCreators = splitCreators(manga.author) + splitCreators(manga.artist)
-            if (mangaCreators.isEmpty()) return null
-            return candidates.firstOrNull { libraryId ->
-                creators[libraryId].orEmpty().any { it in mangaCreators }
-            }
-        }
     }
 
     data class HiddenMatch(
@@ -279,20 +377,42 @@ class LibraryMatcher(
         val libraryTitle: String,
     )
 
+    /** An entry waiting for the user to say whether it is the same title as a library entry. */
+    data class ReviewItem(
+        val sourceId: Long,
+        val url: String,
+        val libraryId: Long,
+        val title: String,
+        val libraryTitle: String,
+        val mangaId: Long?,
+        val reason: String,
+        val sourceAuthor: String,
+        val libraryAuthor: String,
+    )
+
     private class NameTokens(val libraryId: Long, val tokens: Set<String>)
 
     companion object {
         private val storeMutex = Mutex()
 
-        // Houri+: background AI checks
-        private val aiScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        const val REASON_SAME_NAME_OTHER_AUTHOR = "author"
+        const val REASON_SAME_NAME_NO_AUTHOR = "noauthor"
+        const val REASON_SIMILAR_NAME_SAME_AUTHOR = "similar"
+        const val REASON_SIMILAR_NAME_AI = "ai"
+
+        private const val NAME_CHECK_WAIT_MS = 5_000L
+
+        // Background checks (author lookups, AI), shared by every screen so an entry is only checked once
+        private val checkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val nameChecks = ConcurrentHashMap<String, Deferred<Boolean>>()
+        private val detailsSemaphore = Semaphore(2)
         private val aiInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
         private val STOP_WORDS = setOf(
             "the", "a", "an", "of", "to", "in", "on", "and", "is", "i", "im", "my", "me", "as", "with", "for", "at",
             "by", "from", "his", "her", "its", "be", "was", "become", "became", "how", "that", "this", "after",
         )
 
-        /** Houri+: the words of a normalized name that carry meaning. */
+        /** The words of a normalized name that carry meaning. */
         fun significantTokens(normalized: String): Set<String> =
             normalized.split(' ').filter { it.length >= 2 && it !in STOP_WORDS }.toSet()
 
@@ -307,15 +427,11 @@ class LibraryMatcher(
         private val BULLET = Regex("""^\s*([-*•–·]|\d+[.)])\s+""")
         private val INLINE_SEPARATORS = Regex("""\s*[;|•·／/]\s*""")
         private val CREATOR_SEPARATORS = Regex("""\s*(?:[,;/&]|\band\b|\(.*?\))\s*""", RegexOption.IGNORE_CASE)
-        private val CJK_SCRIPTS = setOf(
-            Character.UnicodeScript.HAN,
-            Character.UnicodeScript.HANGUL,
-            Character.UnicodeScript.HIRAGANA,
-            Character.UnicodeScript.KATAKANA,
-        )
 
         fun key(sourceId: Long, url: String) = "$sourceId\t$url"
         private fun key(sourceId: String, url: String) = "$sourceId\t$url"
+
+        private fun String.clean() = replace('\t', ' ').replace('\n', ' ')
 
         fun normalizeTitle(title: String): String {
             var text = Normalizer.normalize(title, Normalizer.Form.NFKC).lowercase()
@@ -326,24 +442,6 @@ class LibraryMatcher(
             text = text.replace(NON_ALPHANUMERIC, " ").trim()
             if (text.startsWith("the ")) text = text.removePrefix("the ")
             return text
-        }
-
-        /**
-         * Whether a name is specific enough to identify a title on its own. Alternative names (often loose
-         * translations) need a longer name than real titles.
-         */
-        fun isDistinctive(normalized: String, alternative: Boolean = false): Boolean {
-            val cjk = normalized.count { it.code.let { code -> Character.UnicodeScript.of(code) in CJK_SCRIPTS } }
-            if (cjk > 0 && cjk * 2 >= normalized.count { it.isLetter() }) {
-                return cjk >= 4
-            }
-            val words = normalized.split(' ').filter { it.isNotEmpty() }
-            val letters = normalized.count { it.isLetter() }
-            return if (alternative) {
-                words.size >= 3 && letters >= 14
-            } else {
-                words.size >= 2 && letters >= 10
-            }
         }
 
         /** Names listed under an "Alternative Names" / "Alternative Titles" heading in a description. */
@@ -375,10 +473,18 @@ class LibraryMatcher(
             return names.map { it.trim().trim('*', '_').trim() }.filter { it.isNotEmpty() }
         }
 
-        fun splitCreators(value: String?): Set<String> {
-            if (value.isNullOrBlank()) return emptySet()
-            return value.split(CREATOR_SEPARATORS)
-                .map { normalizeTitle(it) }
+        /**
+         * Creator names for comparing, ignoring case, accents, spaces and punctuation
+         * ("Yu Jin-Sung" and "yu jinsung" are the same).
+         */
+        fun creatorsOf(vararg values: String?): Set<String> {
+            return values.flatMap { value ->
+                if (value.isNullOrBlank()) {
+                    emptyList()
+                } else {
+                    value.split(CREATOR_SEPARATORS).map { normalizeTitle(it).replace(" ", "") }
+                }
+            }
                 .filter { it.length >= 3 }
                 .toSet()
         }
@@ -396,10 +502,51 @@ class LibraryMatcher(
             }
         }
 
+        fun parseReviewItems(entries: Set<String>): List<ReviewItem> {
+            return entries.mapNotNull { entry ->
+                val parts = entry.split('\t')
+                ReviewItem(
+                    sourceId = parts.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null,
+                    url = parts.getOrNull(1) ?: return@mapNotNull null,
+                    libraryId = parts.getOrNull(2)?.toLongOrNull() ?: return@mapNotNull null,
+                    title = parts.getOrNull(3).orEmpty(),
+                    libraryTitle = parts.getOrNull(4).orEmpty(),
+                    mangaId = parts.getOrNull(5)?.toLongOrNull(),
+                    reason = parts.getOrNull(6).orEmpty(),
+                    sourceAuthor = parts.getOrNull(7).orEmpty(),
+                    libraryAuthor = parts.getOrNull(8).orEmpty(),
+                )
+            }
+        }
+
         /** Show a hidden entry again and never hide it by name match in the future. */
         fun showAgain(sourcePreferences: SourcePreferences, match: HiddenMatch) {
             val key = key(match.sourceId, match.url)
             sourcePreferences.hiddenLibraryMatches().let { pref ->
+                pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet())
+            }
+            sourcePreferences.shownLibraryMatches().let { pref ->
+                pref.set(pref.get() + key)
+            }
+        }
+
+        /** The user confirmed it's the same title: hide it from now on. */
+        fun confirmReview(sourcePreferences: SourcePreferences, item: ReviewItem) {
+            val key = key(item.sourceId, item.url)
+            sourcePreferences.libraryMatchReview().let { pref ->
+                pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet())
+            }
+            sourcePreferences.hiddenLibraryMatches().let { pref ->
+                val entry = listOf(item.sourceId.toString(), item.url, item.libraryId.toString(), item.title, item.libraryTitle)
+                    .joinToString("\t") { it.clean() }
+                pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
+            }
+        }
+
+        /** The user said it's a different title: always show it. */
+        fun rejectReview(sourcePreferences: SourcePreferences, item: ReviewItem) {
+            val key = key(item.sourceId, item.url)
+            sourcePreferences.libraryMatchReview().let { pref ->
                 pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet())
             }
             sourcePreferences.shownLibraryMatches().let { pref ->

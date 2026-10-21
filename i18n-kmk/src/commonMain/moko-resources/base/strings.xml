@@ -760,12 +760,23 @@
     <string name="pref_custom_merge_one_source_per_chapter">Merged entries: one source per chapter</string>
     <string name="pref_custom_merge_one_source_per_chapter_summary">Shows each chapter from one source only: official sources first, the scan for chapters the official hasn\'t reached yet. A chapter read on one source counts as read on the others. Change a merge\'s order in its merge settings (Dedupe → Priority, then drag)</string>
     <string name="pref_custom_hide_library_matches">Hide library titles on every source</string>
-    <string name="pref_custom_hide_library_matches_summary">Hides titles in your library, their merged sources, and the same title on other sources (exact title or alternative-name match). Not applied when searching for a title to migrate or merge</string>
+    <string name="pref_custom_hide_library_matches_summary">Hides titles in your library, their merged sources, and the same title on other sources when both the name (title or alternative name) and the author match. Titles that only look the same wait in the review list below. Not applied when searching for a title to migrate or merge</string>
     <string name="pref_custom_hidden_matches">Titles hidden by name match</string>
     <string name="pref_custom_hidden_matches_summary">%1$d hidden. Tap to review</string>
     <string name="pref_custom_hidden_matches_empty">Nothing has been hidden by a name match yet</string>
     <string name="pref_custom_hidden_match_detail">%1$s · in your library as %2$s</string>
     <string name="action_custom_show_again">Show again</string>
+    <string name="pref_custom_match_review">Titles to review</string>
+    <string name="pref_custom_match_review_summary">%1$d waiting. They look like library titles but don\'t match on both name and author, so they stay visible until you confirm</string>
+    <string name="pref_custom_match_review_empty">Nothing to review</string>
+    <string name="custom_match_review_in_library">In your library: %1$s</string>
+    <string name="custom_match_review_by">by %1$s</string>
+    <string name="custom_match_review_reason_author">Same name, different author</string>
+    <string name="custom_match_review_reason_noauthor">Same name, the source lists no author</string>
+    <string name="custom_match_review_reason_similar">Similar name, same author</string>
+    <string name="custom_match_review_reason_ai">Similar name, the AI thinks it\'s the same series</string>
+    <string name="action_custom_match_same">Same, hide it</string>
+    <string name="action_custom_match_different">Not the same</string>
     <string name="action_sort_popularity">Popularity (Avg Readers)</string>
     <string name="action_sort_author">Author</string>
     <string name="action_sort_artist">Artist</string>
@@ -783,7 +794,7 @@
     <string name="custom_group_no_chapters">No chapters</string>
     <string name="custom_filter_tags_details">Checked: entries must have all of these tags. Crossed out: entries with any of these tags are hidden.</string>
     <string name="pref_custom_ai_library_matching">Use AI for titles under other names</string>
-    <string name="pref_custom_ai_library_matching_summary">When a source lists a title whose name nearly matches one in your library (another translation of the name), asks your AI (Settings → Translation) if it\'s the same series. A yes hides it from then on. Needs the on-device model or a cloud API key</string>
+    <string name="pref_custom_ai_library_matching_summary">When a source lists a title whose name nearly matches one in your library (another translation of the name), asks your AI (Settings → Translation) if it\'s the same series. A yes puts it in the review list for you to confirm. Needs the on-device model or a cloud API key</string>
     <string name="action_custom_ai_suggest">AI suggest</string>
     <string name="action_custom_ai_suggesting">Asking AI…</string>
 </resources>

@@ -6,7 +6,7 @@ import kotlinx.serialization.json.Json
 // KMK -->
 /**
  * Custom build: a broad category that groups library categories, which then act as its sub-categories
- * (e.g. "Controller?" -> Summoner, Necromancer, Spirit Summoner, Beast Tamer).
+ * (e.g. "Fantasy" -> "Isekai", "Dungeon", "Magic Academy").
  *
  * Sub-categories are stored by name so groups survive backups and restores, where category ids change.
  * Groups are kept in the order of the list.

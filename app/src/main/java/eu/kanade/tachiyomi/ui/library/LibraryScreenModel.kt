@@ -94,6 +94,7 @@ import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.model.Category.Companion.UNCATEGORIZED_ID
+import tachiyomi.domain.category.model.CategoryGroup
 import tachiyomi.domain.chapter.interactor.GetBookmarkedChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
@@ -122,6 +123,7 @@ import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.domain.track.interactor.GetTracksPerManga
 import tachiyomi.domain.track.model.Track
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.source.local.LocalSource
 import tachiyomi.source.local.isLocal
@@ -255,8 +257,11 @@ class LibraryScreenModel(
                     libraryPreferences.sortingMode().changes(),
                     libraryPreferences.showHiddenCategories().changes(),
                     libraryPreferences.showEmptyCategoriesSearch().changes(),
-                    ::Triple,
-                ),
+                    // Custom build: regroup when broad categories change
+                    libraryPreferences.categoryGroups().changes(),
+                ) { sort, showHiddenCategories, showEmptyCategoriesSearch, _ ->
+                    Triple(sort, showHiddenCategories, showEmptyCategoriesSearch)
+                },
                 combine(
                     state.map { it.filterCategory }.distinctUntilChanged(),
                     state.map { it.includedCategories }.distinctUntilChanged(),
@@ -601,6 +606,14 @@ class LibraryScreenModel(
                 )
             }
 
+            // Custom build
+            LibraryGroup.BY_CATEGORY_GROUP -> {
+                return groupByCategoryGroups(categories, showHiddenCategories)
+            }
+            LibraryGroup.BY_TAG -> {
+                return groupByTag()
+            }
+
             else -> {
                 return getGroupedMangaItems(
                     groupType = groupType,
@@ -609,6 +622,87 @@ class LibraryScreenModel(
         }
         // KMK <--
     }
+
+    // KMK -->
+    /** Custom build: what a pull-to-refresh on a broad-category or tag tab updates, by tab id. */
+    private val groupUpdateExtras = java.util.concurrent.ConcurrentHashMap<Long, String>()
+
+    fun groupUpdateExtra(category: Category): String? = groupUpdateExtras[category.id]
+
+    /**
+     * Custom build: one tab per broad category with every entry of its sub-categories, followed by the
+     * categories that aren't in a broad category (each in its own tab).
+     */
+    private fun List<LibraryItem>.groupByCategoryGroups(
+        categories: List<Category>,
+        showHiddenCategories: Boolean,
+    ): Map<Category, List</* LibraryItem */ Long>> {
+        val groups = CategoryGroup.decode(libraryPreferences.categoryGroups().get())
+        val itemsByCategory = mutableMapOf</* Category.id */ Long, MutableList</* LibraryItem */ Long>>()
+        forEach { item ->
+            item.libraryManga.categories.forEach { categoryId ->
+                itemsByCategory.getOrPut(categoryId) { mutableListOf() }.add(item.id)
+            }
+        }
+        val visible = categories.filter { showHiddenCategories || !it.hidden }
+        val byName = visible.filterNot { it.isSystemCategory }.associateBy { it.name }
+        val inGroup = mutableSetOf<Long>()
+        val result = LinkedHashMap<Category, List<Long>>()
+        var order = 0L
+
+        groups.forEachIndexed { index, group ->
+            val members = group.categories.mapNotNull { byName[it] }
+            if (members.isEmpty()) return@forEachIndexed
+            inGroup += members.map { it.id }
+            val tab = Category(
+                id = CATEGORY_GROUP_TAB_ID + index,
+                name = group.name,
+                order = order++,
+                flags = 0,
+                hidden = false,
+            )
+            groupUpdateExtras[tab.id] = members.joinToString(",") { it.id.toString() }
+            result[tab] = members.flatMap { itemsByCategory[it.id].orEmpty() }.distinct()
+        }
+        visible.filter { it.id !in inGroup }.forEach { category ->
+            val items = itemsByCategory[category.id].orEmpty().distinct()
+            if (category.isSystemCategory && items.isEmpty()) return@forEach
+            groupUpdateExtras[category.id] = category.id.toString()
+            result[category.copy(order = order++)] = items
+        }
+        return result
+    }
+
+    /** Custom build: one tab per tag; an entry shows in every tab of its tags. */
+    private fun List<LibraryItem>.groupByTag(): Map<Category, List</* LibraryItem */ Long>> {
+        val byTag = java.util.TreeMap<String, MutableList</* LibraryItem */ Long>>(String.CASE_INSENSITIVE_ORDER)
+        val noTags = mutableListOf<Long>()
+        forEach { item ->
+            val tags = item.libraryManga.manga.genre.orEmpty()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (tags.isEmpty()) noTags.add(item.id)
+            tags.forEach { tag -> byTag.getOrPut(tag) { mutableListOf() }.add(item.id) }
+        }
+        val result = LinkedHashMap<Category, List<Long>>()
+        byTag.entries.forEachIndexed { index, (tag, items) ->
+            val tab = Category(id = TAG_TAB_ID + index, name = tag, order = index.toLong(), flags = 0, hidden = false)
+            groupUpdateExtras[tab.id] = tag
+            result[tab] = items.distinct()
+        }
+        if (noTags.isNotEmpty()) {
+            val tab = Category(
+                id = TAG_TAB_ID - 1,
+                name = preferences.context.stringResource(KMR.strings.custom_group_no_tags),
+                order = byTag.size.toLong(),
+                flags = 0,
+                hidden = false,
+            )
+            result[tab] = noTags
+        }
+        return result
+    }
+    // KMK <--
 
     private fun Map<Category, List</* LibraryItem */ Long>>.applySort(
         favoritesById: Map<Long, LibraryItem>,
@@ -1826,6 +1920,10 @@ class LibraryScreenModel(
 
     // KMK -->
     companion object {
+        // Custom build: ids of broad-category and tag tabs, far away from real category ids
+        private const val CATEGORY_GROUP_TAB_ID = 1_000_000_000L
+        private const val TAG_TAB_ID = 2_000_000_000L
+
         /** List of MangaDex UUIDs subject to DMCA takedowns */
         @Volatile
         private var mangaDexDmcaUuids = hashSetOf<String>()

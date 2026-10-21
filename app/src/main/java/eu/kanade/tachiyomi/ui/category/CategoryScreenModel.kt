@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.tachiyomi.ui.category.groups.CategoryGroupsScreenModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.channels.Channel
@@ -93,6 +94,13 @@ class CategoryScreenModel(
         screenModelScope.launch {
             when (renameCategory.await(category, name)) {
                 is RenameCategory.Result.InternalError -> _events.send(CategoryEvent.InternalError)
+                // KMK -->
+                RenameCategory.Result.Success -> CategoryGroupsScreenModel.renameCategory(
+                    Injekt.get(),
+                    oldName = category.name,
+                    newName = name,
+                )
+                // KMK <--
                 else -> {}
             }
         }

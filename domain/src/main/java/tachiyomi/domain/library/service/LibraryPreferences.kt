@@ -273,6 +273,9 @@ class LibraryPreferences(
     // KMK -->
     /** Custom build: count each chapter number once (merged sources / multiple scanlators) for remaining chapters. */
     fun dedupeChapterCounts() = preferenceStore.getBoolean("pref_custom_dedupe_chapter_counts", true)
+
+    /** Custom build: broad categories grouping sub-categories, JSON of [tachiyomi.domain.category.model.CategoryGroup]. */
+    fun categoryGroups() = preferenceStore.getString("pref_custom_category_groups", "")
     // KMK <--
 
     companion object {

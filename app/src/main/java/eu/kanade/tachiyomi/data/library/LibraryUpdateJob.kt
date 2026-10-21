@@ -298,6 +298,26 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 }
 
                 LibraryGroup.UNGROUPED -> libraryManga
+
+                // KMK -->
+                LibraryGroup.BY_CATEGORY_GROUP -> {
+                    val categoryIds = groupExtra?.split(',')?.mapNotNull { it.toLongOrNull() }?.toSet()
+                    if (categoryIds.isNullOrEmpty()) {
+                        libraryManga
+                    } else {
+                        libraryManga.filter { it.categories.any { id -> id in categoryIds } }
+                    }
+                }
+                LibraryGroup.BY_TAG -> {
+                    if (groupExtra.isNullOrBlank()) {
+                        libraryManga
+                    } else {
+                        libraryManga.filter { item ->
+                            item.manga.genre.orEmpty().any { it.trim().equals(groupExtra, ignoreCase = true) }
+                        }
+                    }
+                }
+                // KMK <--
                 else -> libraryManga
             }
             // SY <--

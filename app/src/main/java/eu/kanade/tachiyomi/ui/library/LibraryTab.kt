@@ -128,6 +128,9 @@ data object LibraryTab : Tab {
                     LibraryGroup.BY_DEFAULT -> null
                     LibraryGroup.BY_SOURCE, LibraryGroup.BY_TRACK_STATUS -> category?.id?.toString()
                     LibraryGroup.BY_STATUS -> category?.id?.minus(1)?.toString()
+                    // KMK -->
+                    LibraryGroup.BY_CATEGORY_GROUP, LibraryGroup.BY_TAG -> category?.let(screenModel::groupUpdateExtra)
+                    // KMK <--
                     else -> null
                 },
             )

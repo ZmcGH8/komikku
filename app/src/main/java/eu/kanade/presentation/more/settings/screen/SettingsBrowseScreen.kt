@@ -1,16 +1,32 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.core.preference.asState
+import eu.kanade.domain.source.interactor.LibraryMatcher
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.Preference
@@ -20,6 +36,7 @@ import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import kotlinx.collections.immutable.persistentListOf
 import mihon.domain.extension.interactor.GetExtensionStoreCountAsFlow
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
@@ -54,6 +71,14 @@ object SettingsBrowseScreen : SearchableSettings {
         // SY <--
         // KMK -->
         val relatedMangasInOverflow by uiPreferences.expandRelatedMangas().collectAsState()
+        val hiddenMatches by sourcePreferences.hiddenLibraryMatches().collectAsState()
+        var showHiddenMatches by remember { mutableStateOf(false) }
+        if (showHiddenMatches) {
+            HiddenLibraryMatchesDialog(
+                sourcePreferences = sourcePreferences,
+                onDismissRequest = { showHiddenMatches = false },
+            )
+        }
         // KMK <--
         return listOf(
             // SY -->
@@ -141,6 +166,18 @@ object SettingsBrowseScreen : SearchableSettings {
                         preference = sourcePreferences.hideInLibraryItems(),
                         title = stringResource(MR.strings.pref_hide_in_library_items),
                     ),
+                    // KMK -->
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = sourcePreferences.hideLibraryMatches(),
+                        title = stringResource(KMR.strings.pref_custom_hide_library_matches),
+                        subtitle = stringResource(KMR.strings.pref_custom_hide_library_matches_summary),
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.pref_custom_hidden_matches),
+                        subtitle = stringResource(KMR.strings.pref_custom_hidden_matches_summary, hiddenMatches.size),
+                        onClick = { showHiddenMatches = true },
+                    ),
+                    // KMK <--
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(MR.strings.extensionStores),
                         subtitle = pluralStringResource(MR.plurals.num_repos, reposCount.toInt(), reposCount),
@@ -169,3 +206,66 @@ object SettingsBrowseScreen : SearchableSettings {
         )
     }
 }
+
+// KMK -->
+@Composable
+private fun HiddenLibraryMatchesDialog(
+    sourcePreferences: SourcePreferences,
+    onDismissRequest: () -> Unit,
+) {
+    val sourceManager = remember { Injekt.get<SourceManager>() }
+    val entries by sourcePreferences.hiddenLibraryMatches().collectAsState()
+    val matches = remember(entries) {
+        LibraryMatcher.parseHiddenMatches(entries)
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER, LibraryMatcher.HiddenMatch::libraryTitle))
+    }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(text = stringResource(KMR.strings.pref_custom_hidden_matches)) },
+        text = {
+            if (matches.isEmpty()) {
+                Text(text = stringResource(KMR.strings.pref_custom_hidden_matches_empty))
+            } else {
+                LazyColumn {
+                    items(
+                        items = matches,
+                        key = { "${it.sourceId}\t${it.url}" },
+                    ) { match ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = match.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        KMR.strings.pref_custom_hidden_match_detail,
+                                        sourceManager.getOrStub(match.sourceId).name,
+                                        match.libraryTitle,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(onClick = { LibraryMatcher.showAgain(sourcePreferences, match) }) {
+                                Text(text = stringResource(KMR.strings.action_custom_show_again))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_close))
+            }
+        },
+    )
+}
+// KMK <--
+

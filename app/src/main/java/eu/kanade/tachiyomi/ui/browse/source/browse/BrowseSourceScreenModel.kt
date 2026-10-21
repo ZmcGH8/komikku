@@ -19,6 +19,7 @@ import eu.kanade.core.preference.asState
 import eu.kanade.domain.manga.interactor.UpdateManga
 import eu.kanade.domain.source.interactor.GetExhSavedSearch
 import eu.kanade.domain.source.interactor.GetIncognitoState
+import eu.kanade.domain.source.interactor.LibraryMatcher
 import eu.kanade.domain.source.interactor.ToggleIncognito
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.track.interactor.AddTracks
@@ -125,6 +126,10 @@ open class BrowseSourceScreenModel(
     private val insertSavedSearch: InsertSavedSearch = Injekt.get(),
     private val getExhSavedSearch: GetExhSavedSearch = Injekt.get(),
     // SY <--
+    // KMK -->
+    // Custom build: false where the user is looking for a title to migrate or merge
+    allowHidingLibraryMatches: Boolean = true,
+    // KMK <--
 ) : StateScreenModel<BrowseSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
@@ -219,6 +224,11 @@ open class BrowseSourceScreenModel(
      * Flow of Pager flow tied to [State.listing]
      */
     private val hideInLibraryItems = sourcePreferences.hideInLibraryItems().get()
+
+    // KMK -->
+    private val hideLibraryMatches = allowHidingLibraryMatches && sourcePreferences.hideLibraryMatches().get()
+    private val libraryMatcher by lazy { LibraryMatcher() }
+    // KMK <--
     val mangaPagerFlowFlow = state.map { it.listing }
         .distinctUntilChanged()
         .map { listing ->
@@ -235,7 +245,12 @@ open class BrowseSourceScreenModel(
                         // SY <--
                         .stateIn(ioCoroutineScope)
                 }
-                    .filter { !hideInLibraryItems || !it.value.first.favorite }
+                    .filter {
+                        // KMK -->
+                        if (hideLibraryMatches) return@filter !libraryMatcher.isInLibrary(it.value.first)
+                        // KMK <--
+                        !hideInLibraryItems || !it.value.first.favorite
+                    }
             }
                 .cachedIn(ioCoroutineScope)
         }

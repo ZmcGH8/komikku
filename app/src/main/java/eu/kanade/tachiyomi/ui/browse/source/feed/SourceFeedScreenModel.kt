@@ -12,6 +12,7 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.source.interactor.GetExhSavedSearch
 import eu.kanade.domain.source.interactor.GetIncognitoState
+import eu.kanade.domain.source.interactor.LibraryMatcher
 import eu.kanade.domain.source.interactor.ToggleIncognito
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
@@ -203,6 +204,8 @@ open class SourceFeedScreenModel(
 
     // KMK -->
     private val hideInLibraryFeedItems = sourcePreferences.hideInLibraryFeedItems().get()
+    private val hideLibraryMatches = sourcePreferences.hideLibraryMatches().get()
+    private val libraryMatcher by lazy { LibraryMatcher() }
     // KMK <--
 
     /**
@@ -233,7 +236,13 @@ open class SourceFeedScreenModel(
                             .distinctBy { it.url }
                             .let { networkToLocalManga(it) }
                             // KMK -->
-                            .filter { !hideInLibraryFeedItems || !it.favorite }
+                            .filter {
+                                if (hideLibraryMatches) {
+                                    !libraryMatcher.isInLibrary(it)
+                                } else {
+                                    !hideInLibraryFeedItems || !it.favorite
+                                }
+                            }
                         // KMK <--
                     }
 

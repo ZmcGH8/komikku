@@ -52,6 +52,15 @@ class SourcePreferences(
 
     // KMK -->
     fun hideInLibraryFeedItems() = preferenceStore.getBoolean("feed_hide_in_library_items", false)
+
+    // Custom build: hide library titles on every source, including the same title found on other sources
+    fun hideLibraryMatches() = preferenceStore.getBoolean("pref_custom_hide_library_matches", true)
+
+    // Browse entries hidden by a name match: "sourceId\turl\tlibraryId\tbrowseTitle\tlibraryTitle"
+    fun hiddenLibraryMatches() = preferenceStore.getStringSet("pref_custom_hidden_library_matches", emptySet())
+
+    // Browse entries the user chose to show again: "sourceId\turl"
+    fun shownLibraryMatches() = preferenceStore.getStringSet("pref_custom_shown_library_matches", emptySet())
     // KMK <--
 
     @Deprecated("Use ExtensionRepoRepository instead", replaceWith = ReplaceWith("ExtensionRepoRepository.getAll()"))

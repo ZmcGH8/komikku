@@ -250,6 +250,12 @@
     <string name="action_custom_show_again">Show again</string>
     <string name="action_sort_popularity">Popularity (Avg Readers)</string>
     <string name="custom_group_no_tags">No tags</string>
+    <string name="custom_group_no_author">No author</string>
+    <string name="custom_group_no_chapters">No chapters</string>
+    <string name="custom_group_by_author">Authors</string>
+    <string name="custom_group_by_scanlator">Scanlators</string>
+    <string name="action_sort_author">Author</string>
+    <string name="action_sort_scanlator">Scanlator</string>
     <string name="custom_scanlator_priority_hint">Use the arrows to rank scanlators. When the same chapter exists more than once, the reader uses the highest-ranked one (turn on Skip duplicate chapters in reader settings). Numbers are chapter counts.</string>
     <string name="custom_filter_tags_details">Checked: entries must have all of these tags. Crossed out: entries with any of these tags are hidden.</string>
     <string name="custom_group_by_category_group">Categories</string>

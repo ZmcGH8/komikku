@@ -40,6 +40,8 @@ data class LibrarySort(
         // KMK -->
         // Custom build: "Avg Readers" from the entry's description (high flag value to stay clear of upstream)
         data object Popularity : Type(0b00111000)
+        data object Author : Type(0b00110100)
+        data object Scanlator : Type(0b00110000)
         // KMK <--
 
         companion object {
@@ -88,7 +90,7 @@ data class LibrarySort(
                 Type.DateAdded,
                 Type.TrackerMean,
                 /* SY -->*/ Type.TagList, /* SY <--*/
-                /* KMK -->*/ Type.Popularity, /* KMK <--*/
+                /* KMK -->*/ Type.Popularity, Type.Author, Type.Scanlator, /* KMK <--*/
                 Type.Random,
             )
         }
@@ -122,6 +124,8 @@ data class LibrarySort(
                     // SY <--
                     // KMK -->
                     "POPULARITY" -> Type.Popularity
+                    "AUTHOR" -> Type.Author
+                    "SCANLATOR" -> Type.Scanlator
                     // KMK <--
                     "RANDOM" -> Type.Random
                     else -> Type.Alphabetical
@@ -150,6 +154,8 @@ data class LibrarySort(
             // SY <--
             // KMK -->
             Type.Popularity -> "POPULARITY"
+            Type.Author -> "AUTHOR"
+            Type.Scanlator -> "SCANLATOR"
             // KMK <--
             Type.Random -> "RANDOM"
         }

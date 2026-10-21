@@ -90,6 +90,7 @@ import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.data.DatabaseHandler
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
@@ -654,6 +655,12 @@ class LibraryScreenModel(
             LibraryGroup.BY_TAG -> {
                 return groupByTag()
             }
+            LibraryGroup.BY_AUTHOR -> {
+                return groupByAuthor()
+            }
+            LibraryGroup.BY_SCANLATOR -> {
+                return groupByScanlator()
+            }
 
             else -> {
                 return getGroupedMangaItems(
@@ -710,6 +717,84 @@ class LibraryScreenModel(
             if (category.isSystemCategory && items.isEmpty()) return@forEach
             groupUpdateExtras[category.id] = category.id.toString()
             result[category.copy(order = order++)] = items
+        }
+        return result
+    }
+
+    /** Custom build: tabs named after [names], each holding the entries listed for it, sorted by name. */
+    private fun namedTabs(
+        names: Map<String, List<Long>>,
+        noneLabel: String,
+        none: List<Long>,
+        firstId: Long,
+    ): Map<Category, List</* LibraryItem */ Long>> {
+        val result = LinkedHashMap<Category, List<Long>>()
+        names.entries
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.key })
+            .forEachIndexed { index, (name, items) ->
+                val tab = Category(id = firstId + index, name = name, order = index.toLong(), flags = 0, hidden = false)
+                val distinctItems = items.distinct()
+                groupUpdateExtras[tab.id] = distinctItems.joinToString(",")
+                result[tab] = distinctItems
+            }
+        if (none.isNotEmpty()) {
+            val tab = Category(id = firstId - 1, name = noneLabel, order = names.size.toLong(), flags = 0, hidden = false)
+            groupUpdateExtras[tab.id] = none.joinToString(",")
+            result[tab] = none
+        }
+        return result
+    }
+
+    /** Custom build: one tab per author; an entry shows in the tab of each of its authors. */
+    private fun List<LibraryItem>.groupByAuthor(): Map<Category, List</* LibraryItem */ Long>> {
+        val byAuthor = java.util.TreeMap<String, MutableList<Long>>(String.CASE_INSENSITIVE_ORDER)
+        val none = mutableListOf<Long>()
+        forEach { item ->
+            val authors = splitAuthors(item.libraryManga.manga.author)
+            if (authors.isEmpty()) none.add(item.id)
+            authors.forEach { author -> byAuthor.getOrPut(author) { mutableListOf() }.add(item.id) }
+        }
+        return namedTabs(
+            names = byAuthor,
+            noneLabel = preferences.context.stringResource(KMR.strings.custom_group_no_author),
+            none = none,
+            firstId = AUTHOR_TAB_ID,
+        )
+    }
+
+    /** Custom build: one tab per scanlator (or source, for chapters without one). */
+    private fun List<LibraryItem>.groupByScanlator(): Map<Category, List</* LibraryItem */ Long>> {
+        val counts = loadScanlatorCounts()
+        val byScanlator = java.util.TreeMap<String, MutableList<Long>>(String.CASE_INSENSITIVE_ORDER)
+        val none = mutableListOf<Long>()
+        forEach { item ->
+            val scanlators = counts[item.id]?.keys.orEmpty()
+            if (scanlators.isEmpty()) none.add(item.id)
+            scanlators.forEach { name -> byScanlator.getOrPut(name) { mutableListOf() }.add(item.id) }
+        }
+        return namedTabs(
+            names = byScanlator,
+            noneLabel = preferences.context.stringResource(KMR.strings.custom_group_no_chapters),
+            none = none,
+            firstId = SCANLATOR_TAB_ID,
+        )
+    }
+
+    /**
+     * Custom build: chapters per scanlator for every library entry. Chapters without a scanlator count
+     * under their source's name.
+     */
+    private fun loadScanlatorCounts(): Map</* LibraryManga.id */ Long, Map<String, Long>> {
+        val rows = runBlocking {
+            Injekt.get<DatabaseHandler>().awaitList { kmk_customQueries.libraryScanlatorCounts() }
+        }
+        val result = HashMap<Long, MutableMap<String, Long>>()
+        rows.forEach { row ->
+            val mangaId: Long = row.mangaId ?: return@forEach
+            val scanlator: String? = row.scanlator
+            val name = scanlator?.takeIf { it.isNotBlank() }
+                ?: sourceManager.getOrStub(row.sourceId).name.ifBlank { row.sourceId.toString() }
+            result.getOrPut(mangaId) { mutableMapOf() }.merge(name, row.chapterCount, Long::plus)
         }
         return result
     }
@@ -794,6 +879,20 @@ class LibraryScreenModel(
                 averageReadersFromDescription(item.libraryManga.manga.description) ?: -1.0
             }
         }
+        val firstAuthors by lazy {
+            favoritesById.mapValues { (_, item) -> splitAuthors(item.libraryManga.manga.author).firstOrNull() }
+        }
+        val mainScanlators by lazy {
+            loadScanlatorCounts().mapValues { (_, counts) -> counts.maxByOrNull { it.value }?.key }
+        }
+
+        // Entries without a value always go last
+        fun compareNamesMissingLast(name1: String?, name2: String?, ascending: Boolean): Int = when {
+            name1 == name2 -> 0
+            name1 == null -> if (ascending) 1 else -1
+            name2 == null -> if (ascending) -1 else 1
+            else -> name1.lowercase().compareToWithCollator(name2.lowercase())
+        }
         // KMK <--
 
         fun LibrarySort.comparator(): Comparator<LibraryItem> = Comparator { manga1, manga2 ->
@@ -853,6 +952,12 @@ class LibraryScreenModel(
                 // KMK -->
                 LibrarySort.Type.Popularity -> {
                     (averageReaders[manga1.id] ?: -1.0).compareTo(averageReaders[manga2.id] ?: -1.0)
+                }
+                LibrarySort.Type.Author -> {
+                    compareNamesMissingLast(firstAuthors[manga1.id], firstAuthors[manga2.id], sort.isAscending)
+                }
+                LibrarySort.Type.Scanlator -> {
+                    compareNamesMissingLast(mainScanlators[manga1.id], mainScanlators[manga2.id], sort.isAscending)
                 }
                 // KMK <--
             }
@@ -1961,9 +2066,22 @@ class LibraryScreenModel(
 
     // KMK -->
     companion object {
-        // Custom build: ids of broad-category and tag tabs, far away from real category ids
+        // Custom build: ids of broad-category, tag, author and scanlator tabs, far away from real category ids
         private const val CATEGORY_GROUP_TAB_ID = 1_000_000_000L
         private const val TAG_TAB_ID = 2_000_000_000L
+        private const val AUTHOR_TAB_ID = 3_000_000_000L
+        private const val SCANLATOR_TAB_ID = 4_000_000_000L
+
+        private val AUTHOR_SEPARATORS = Regex("""\s*[,;/&]\s*""")
+
+        /** Custom build: author names from a manga's author field ("A, B & C" -> A, B, C). */
+        fun splitAuthors(author: String?): List<String> {
+            if (author.isNullOrBlank()) return emptyList()
+            return author.split(AUTHOR_SEPARATORS)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinctBy { it.lowercase() }
+        }
 
         /** List of MangaDex UUIDs subject to DMCA takedowns */
         @Volatile

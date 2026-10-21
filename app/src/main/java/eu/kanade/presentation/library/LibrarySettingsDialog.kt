@@ -275,6 +275,8 @@ private fun ColumnScope.SortPage(
             // SY <--
             // KMK -->
             KMR.strings.action_sort_popularity to LibrarySort.Type.Popularity,
+            KMR.strings.action_sort_author to LibrarySort.Type.Author,
+            KMR.strings.action_sort_scanlator to LibrarySort.Type.Scanlator,
             // KMK <--
             MR.strings.action_sort_random to LibrarySort.Type.Random,
         )
@@ -459,6 +461,8 @@ private fun ColumnScope.GroupPage(
             add(LibraryGroup.BY_DEFAULT)
             // KMK -->
             add(LibraryGroup.BY_TAG)
+            add(LibraryGroup.BY_AUTHOR)
+            add(LibraryGroup.BY_SCANLATOR)
             // KMK <--
             add(LibraryGroup.BY_SOURCE)
             add(LibraryGroup.BY_STATUS)
@@ -475,6 +479,8 @@ private fun ColumnScope.GroupPage(
                 when {
                     it == LibraryGroup.BY_CATEGORY_GROUP -> KMR.strings.custom_group_by_category_group
                     it == LibraryGroup.BY_TAG -> KMR.strings.custom_group_by_tag
+                    it == LibraryGroup.BY_AUTHOR -> KMR.strings.custom_group_by_author
+                    it == LibraryGroup.BY_SCANLATOR -> KMR.strings.custom_group_by_scanlator
                     it == LibraryGroup.BY_DEFAULT && hasCategoryGroups -> KMR.strings.custom_group_by_sub_category
                     else -> LibraryGroup.groupTypeStringRes(it)
                 },

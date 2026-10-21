@@ -19,6 +19,12 @@ object LibraryGroup {
 
     /** One tab per tag */
     const val BY_TAG = 21
+
+    /** One tab per author */
+    const val BY_AUTHOR = 22
+
+    /** One tab per scanlator (or source, for chapters without a scanlator) */
+    const val BY_SCANLATOR = 23
     // KMK <--
 
     fun groupTypeStringRes(type: Int): StringResource {

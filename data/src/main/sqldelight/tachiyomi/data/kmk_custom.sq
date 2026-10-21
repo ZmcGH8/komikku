@@ -38,4 +38,29 @@ LEFT JOIN mangas C
 ON C._id = ME.manga_id
 WHERE M.favorite = 1
 AND ME.manga_source != 6969;
+
+-- Chapters per scanlator for each library entry (merged entries combine their sources).
+-- Chapters without a scanlator are reported with an empty scanlator and their source id.
+libraryScanlatorCounts:
+SELECT
+    U.owner_id AS mangaId,
+    U.scanlator_name AS scanlator,
+    U.source_id AS sourceId,
+    count(*) AS chapterCount
+FROM (
+    SELECT
+        coalesce(ME.merge_id, C.manga_id) AS owner_id,
+        coalesce(trim(C.scanlator), '') AS scanlator_name,
+        CM.source AS source_id
+    FROM chapters C
+    JOIN mangas CM
+    ON CM._id = C.manga_id
+    LEFT JOIN excluded_scanlators ES
+    ON C.manga_id = ES.manga_id
+    AND C.scanlator = ES.scanlator
+    LEFT JOIN merged ME
+    ON ME.manga_id = C.manga_id
+    WHERE ES.scanlator IS NULL
+) AS U
+GROUP BY U.owner_id, U.scanlator_name, U.source_id;
 -- KMK <--

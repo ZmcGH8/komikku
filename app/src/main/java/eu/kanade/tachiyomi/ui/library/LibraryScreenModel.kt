@@ -103,6 +103,7 @@ import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.library.model.LibrarySort
+import tachiyomi.domain.library.model.averageReadersFromDescription
 import tachiyomi.domain.library.model.sort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetIdsOfFavoriteMangaWithMetadata
@@ -652,6 +653,14 @@ class LibraryScreenModel(
             }
         }
 
+        // KMK -->
+        val averageReaders by lazy {
+            favoritesById.mapValues { (_, item) ->
+                averageReadersFromDescription(item.libraryManga.manga.description) ?: -1.0
+            }
+        }
+        // KMK <--
+
         fun LibrarySort.comparator(): Comparator<LibraryItem> = Comparator { manga1, manga2 ->
             // SY -->
             val sort = groupSort ?: this
@@ -706,6 +715,11 @@ class LibraryScreenModel(
                     manga1IndexOfTag.compareTo(manga2IndexOfTag)
                 }
                 // SY <--
+                // KMK -->
+                LibrarySort.Type.Popularity -> {
+                    (averageReaders[manga1.id] ?: -1.0).compareTo(averageReaders[manga2.id] ?: -1.0)
+                }
+                // KMK <--
             }
         }
 

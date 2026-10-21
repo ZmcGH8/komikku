@@ -37,6 +37,11 @@ data class LibrarySort(
         data object TagList : Type(0b00100100)
         // SY <--
 
+        // KMK -->
+        // Custom build: "Avg Readers" from the entry's description (high flag value to stay clear of upstream)
+        data object Popularity : Type(0b00111000)
+        // KMK <--
+
         companion object {
             fun valueOf(flag: Long): Type {
                 return types.find { type -> type.flag == flag and type.mask } ?: default.type
@@ -83,6 +88,7 @@ data class LibrarySort(
                 Type.DateAdded,
                 Type.TrackerMean,
                 /* SY -->*/ Type.TagList, /* SY <--*/
+                /* KMK -->*/ Type.Popularity, /* KMK <--*/
                 Type.Random,
             )
         }
@@ -114,6 +120,9 @@ data class LibrarySort(
                     // SY -->
                     "TAG_LIST" -> Type.TagList
                     // SY <--
+                    // KMK -->
+                    "POPULARITY" -> Type.Popularity
+                    // KMK <--
                     "RANDOM" -> Type.Random
                     else -> Type.Alphabetical
                 }
@@ -139,6 +148,9 @@ data class LibrarySort(
             // SY -->
             Type.TagList -> "TAG_LIST"
             // SY <--
+            // KMK -->
+            Type.Popularity -> "POPULARITY"
+            // KMK <--
             Type.Random -> "RANDOM"
         }
         val direction = if (direction == Direction.Ascending) "ASCENDING" else "DESCENDING"

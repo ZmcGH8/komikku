@@ -308,6 +308,22 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 }
 
                 LibraryGroup.UNGROUPED -> libraryManga
+
+                // KMK --> Houri+: tag/author/artist/studio/scanlator tabs pass their entry ids
+                LibraryGroup.BY_TAG,
+                LibraryGroup.BY_AUTHOR,
+                LibraryGroup.BY_ARTIST,
+                LibraryGroup.BY_STUDIO,
+                LibraryGroup.BY_SCANLATOR,
+                -> {
+                    val mangaIds = groupExtra?.split(',')?.mapNotNull { it.toLongOrNull() }?.toSet()
+                    if (mangaIds.isNullOrEmpty()) {
+                        libraryManga
+                    } else {
+                        libraryManga.filter { it.manga.id in mangaIds }
+                    }
+                }
+                // KMK <--
                 else -> libraryManga
             }
             // SY <--

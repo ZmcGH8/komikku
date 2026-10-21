@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -33,14 +34,17 @@ import androidx.compose.ui.util.fastForEach
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
+import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.library.LibrarySettingsScreenModel
 import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.map
+import mihon.app.di.globalAppGraph
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.toggle
+import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.model.LibraryGroup
@@ -196,6 +200,9 @@ private fun ColumnScope.FilterPage(
         categories = categories,
         itemCount = itemCount,
     )
+    // KMK --> Houri+
+    TagsFilter(libraryPreferences = screenModel.libraryPreferences)
+    // KMK <--
     // KMK <--
 
     val trackers by screenModel.trackersFlow.collectAsState()
@@ -276,6 +283,13 @@ private fun ColumnScope.SortPage(
             // SY -->
             tagSortPair,
             // SY <--
+            // KMK --> Houri+
+            KMR.strings.action_sort_popularity to LibrarySort.Type.Popularity,
+            KMR.strings.action_sort_author to LibrarySort.Type.Author,
+            KMR.strings.action_sort_artist to LibrarySort.Type.Artist,
+            KMR.strings.action_sort_studio to LibrarySort.Type.Studio,
+            KMR.strings.action_sort_scanlator to LibrarySort.Type.Scanlator,
+            // KMK <--
             MR.strings.action_sort_random to LibrarySort.Type.Random,
         )
     }
@@ -455,6 +469,13 @@ private fun ColumnScope.GroupPage(
     val groups = remember(hasCategories, trackers) {
         buildList {
             add(LibraryGroup.BY_DEFAULT)
+            // KMK --> Houri+
+            add(LibraryGroup.BY_TAG)
+            add(LibraryGroup.BY_AUTHOR)
+            add(LibraryGroup.BY_ARTIST)
+            add(LibraryGroup.BY_STUDIO)
+            add(LibraryGroup.BY_SCANLATOR)
+            // KMK <--
             add(LibraryGroup.BY_SOURCE)
             add(LibraryGroup.BY_STATUS)
             if (trackers.isNotEmpty()) {
@@ -466,7 +487,16 @@ private fun ColumnScope.GroupPage(
         }.map {
             GroupMode(
                 it,
-                LibraryGroup.groupTypeStringRes(it),
+                // KMK --> Houri+
+                when (it) {
+                    LibraryGroup.BY_TAG -> KMR.strings.custom_group_by_tag
+                    LibraryGroup.BY_AUTHOR -> KMR.strings.custom_group_by_author
+                    LibraryGroup.BY_ARTIST -> KMR.strings.custom_group_by_artist
+                    LibraryGroup.BY_STUDIO -> KMR.strings.custom_group_by_studio
+                    LibraryGroup.BY_SCANLATOR -> KMR.strings.custom_group_by_scanlator
+                    else -> LibraryGroup.groupTypeStringRes(it)
+                },
+                // KMK <--
                 groupTypeDrawableRes(it),
             )
         }.toImmutableList()
@@ -534,6 +564,72 @@ private fun CategoriesFilter(
         )
         Spacer(Modifier.weight(1f))
         TextButton(onClick = { showCategoriesDialog = true }) {
+            Text(stringResource(MR.strings.action_edit))
+        }
+    }
+}
+// KMK <--
+
+// KMK -->
+/** Houri+: filter the library by tags. */
+@Composable
+private fun TagsFilter(
+    libraryPreferences: LibraryPreferences,
+) {
+    val filterTags by libraryPreferences.filterTags().collectAsState()
+    val filterTagsInclude = libraryPreferences.filterTagsInclude()
+    val filterTagsExclude = libraryPreferences.filterTagsExclude()
+    val included by filterTagsInclude.collectAsState()
+    val excluded by filterTagsExclude.collectAsState()
+
+    var showTagsDialog by rememberSaveable { mutableStateOf(false) }
+    if (showTagsDialog) {
+        val tags by produceState(initialValue = emptyList<String>()) {
+            value = withIOContext {
+                globalAppGraph.getFavorites.await()
+                    .flatMap { it.genre.orEmpty() }
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinctBy { it.lowercase() }
+                    .sortedWith(String.CASE_INSENSITIVE_ORDER)
+            }
+        }
+        if (tags.isNotEmpty()) {
+            TriStateListDialog(
+                title = stringResource(KMR.strings.custom_group_by_tag),
+                message = stringResource(KMR.strings.custom_filter_tags_details),
+                items = tags,
+                initialChecked = tags.filter { it.lowercase() in included },
+                initialInversed = tags.filter { it.lowercase() in excluded },
+                itemLabel = { it },
+                onDismissRequest = { showTagsDialog = false },
+                onValueChanged = { newIncluded, newExcluded ->
+                    filterTagsInclude.set(newIncluded.map { it.lowercase() }.toSet())
+                    filterTagsExclude.set(newExcluded.map { it.lowercase() }.toSet())
+                    showTagsDialog = false
+                },
+            )
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .clickable(onClick = { libraryPreferences.filterTags().toggle() })
+            .fillMaxWidth()
+            .padding(horizontal = SettingsItemsPaddings.Horizontal),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        Checkbox(
+            checked = filterTags,
+            onCheckedChange = null,
+        )
+        Text(
+            text = stringResource(KMR.strings.custom_group_by_tag),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = { showTagsDialog = true }) {
             Text(stringResource(MR.strings.action_edit))
         }
     }

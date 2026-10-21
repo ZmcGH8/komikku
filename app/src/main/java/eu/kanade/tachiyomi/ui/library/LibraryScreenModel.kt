@@ -114,7 +114,10 @@ import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.library.model.LibrarySort
 import tachiyomi.domain.library.model.SubcategoryUpdateScope
+import tachiyomi.domain.library.model.artistsFromDescription
+import tachiyomi.domain.library.model.averageReadersFromDescription
 import tachiyomi.domain.library.model.sort
+import tachiyomi.domain.library.model.studiosFromDescription
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetIdsOfFavoriteMangaWithMetadata
 import tachiyomi.domain.manga.interactor.GetLibraryManga
@@ -132,6 +135,7 @@ import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.domain.track.interactor.GetTracksPerManga
 import tachiyomi.domain.track.model.Track
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.source.local.LocalSource
 import tachiyomi.source.local.isLocal
@@ -208,11 +212,13 @@ class LibraryScreenModel(
                     state.map { it.includedCategories }.distinctUntilChanged(),
                     state.map { it.excludedCategories }.distinctUntilChanged(),
                     libraryPreferences.categoryManagerSortMode().changes(),
-                    ::Triple,
+                    // Houri+: tag filter
+                    getTagFilterFlow(),
+                    ::CategoryFilterInputs,
                 ),
                 // KMK <--
                 getLibraryItemPreferencesFlow(),
-            ) { (searchQuery, categories, favorites), (tracksMap, trackingFilters, trackedOverall), (includedCategories, excludedCategories, categorySortMode), itemPreferences ->
+            ) { (searchQuery, categories, favorites), (tracksMap, trackingFilters, trackedOverall), (includedCategories, excludedCategories, categorySortMode, tagFilter), itemPreferences ->
                 // KMK --> The transform only hands the inputs to the collector; the actual
                 // filtering happens inside collectLatest below, where a batching storm can
                 // cancel it and recompute for the newest inputs instead of queuing passes.
@@ -227,6 +233,9 @@ class LibraryScreenModel(
                     excludedCategories = excludedCategories,
                     categorySortMode = categorySortMode,
                     itemPreferences = itemPreferences,
+                    // KMK -->
+                    tagFilter = tagFilter,
+                    // KMK <--
                 )
                 // KMK <--
             }
@@ -237,7 +246,7 @@ class LibraryScreenModel(
                 // through - but N invalidations landing back-to-back cost one pass, not N.
                 .conflate()
                 // KMK <--
-                .collectLatest { (searchQuery, categories, favorites, tracksMap, trackingFilters, trackedOverall, includedCategories, excludedCategories, categorySortMode, itemPreferences) ->
+                .collectLatest { (searchQuery, categories, favorites, tracksMap, trackingFilters, trackedOverall, includedCategories, excludedCategories, categorySortMode, itemPreferences, tagFilter) ->
                     val filteredFavorites = favorites
                         .applyFilters(
                             tracksMap,
@@ -249,6 +258,9 @@ class LibraryScreenModel(
                             excludedCategories,
                             // KMK <--
                         )
+                        // KMK --> Houri+: tag filter
+                        .let { items -> if (tagFilter.isActive) items.filter(tagFilter::matches) else items }
+                        // KMK <--
                         .let {
                             if (searchQuery == null) {
                                 // Don't do anything
@@ -452,7 +464,10 @@ class LibraryScreenModel(
             getLibraryItemPreferencesFlow(),
             getTrackingFiltersFlow(),
             libraryPreferences.filterTrackingOverall().changes(),
-        ) { prefs, trackFilters, trackedOverall ->
+            // KMK -->
+            getTagFilterFlow(),
+            // KMK <--
+        ) { prefs, trackFilters, trackedOverall/* KMK --> */, tagFilter/* KMK <-- */ ->
             listOf(
                 prefs.filterDownloaded,
                 prefs.filterUnread,
@@ -468,7 +483,8 @@ class LibraryScreenModel(
             )
                 .fastAny { it != TriState.DISABLED } ||
                 // KMK -->
-                prefs.filterCategories
+                prefs.filterCategories ||
+                tagFilter.isActive
             // KMK <--
         }
             .distinctUntilChanged()
@@ -647,6 +663,30 @@ class LibraryScreenModel(
                 )
             }
 
+            // Houri+ (custom build) groupings
+            LibraryGroup.BY_TAG -> {
+                return groupByNames(KMR.strings.custom_group_no_tags, TAG_TAB_ID) { item ->
+                    item.libraryManga.manga.genre.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }
+                }
+            }
+            LibraryGroup.BY_AUTHOR -> {
+                return groupByNames(KMR.strings.custom_group_no_author, AUTHOR_TAB_ID) {
+                    splitAuthors(it.libraryManga.manga.author)
+                }
+            }
+            LibraryGroup.BY_ARTIST -> {
+                return groupByNames(KMR.strings.custom_group_no_artist, ARTIST_TAB_ID) { artistsOf(it) }
+            }
+            LibraryGroup.BY_STUDIO -> {
+                return groupByNames(KMR.strings.custom_group_no_studio, STUDIO_TAB_ID) { studiosOf(it) }
+            }
+            LibraryGroup.BY_SCANLATOR -> {
+                val counts = loadScanlatorCounts()
+                return groupByNames(KMR.strings.custom_group_no_chapters, SCANLATOR_TAB_ID) { item ->
+                    counts[item.id]?.keys.orEmpty().toList()
+                }
+            }
+
             else -> {
                 return getGroupedMangaItems(
                     groupType = groupType,
@@ -655,6 +695,80 @@ class LibraryScreenModel(
         }
         // KMK <--
     }
+
+    // KMK -->
+    /** Houri+: what a pull-to-refresh on a tag/author/artist/studio/scanlator tab updates (entry ids), by tab id. */
+    private val groupUpdateExtras = java.util.concurrent.ConcurrentHashMap<Long, String>()
+
+    fun groupUpdateExtra(category: Category): String? = groupUpdateExtras[category.id]
+
+    /** Houri+: one tab per name returned by [namesOf], sorted by name; an entry shows in the tab of each name. */
+    private fun List<LibraryItem>.groupByNames(
+        noneLabel: dev.icerock.moko.resources.StringResource,
+        firstId: Long,
+        namesOf: (LibraryItem) -> List<String>,
+    ): Map<Category, List</* LibraryItem */ Long>> {
+        val byName = java.util.TreeMap<String, MutableList<Long>>(String.CASE_INSENSITIVE_ORDER)
+        val none = mutableListOf<Long>()
+        forEach { item ->
+            val names = namesOf(item)
+            if (names.isEmpty()) none.add(item.id)
+            names.forEach { name -> byName.getOrPut(name) { mutableListOf() }.add(item.id) }
+        }
+        val result = LinkedHashMap<Category, List<Long>>()
+        byName.entries.forEachIndexed { index, (name, items) ->
+            val tab = Category(id = firstId + index, name = name, order = index.toLong(), flags = 0, hidden = false)
+            val distinctItems = items.distinct()
+            groupUpdateExtras[tab.id] = distinctItems.joinToString(",")
+            result[tab] = distinctItems
+        }
+        if (none.isNotEmpty()) {
+            val tab = Category(
+                id = firstId - 1,
+                name = preferences.context.stringResource(noneLabel),
+                order = byName.size.toLong(),
+                flags = 0,
+                hidden = false,
+            )
+            groupUpdateExtras[tab.id] = none.joinToString(",")
+            result[tab] = none
+        }
+        return result
+    }
+
+    /** Houri+: artists credited in the description, else the artist field. */
+    private fun artistsOf(item: LibraryItem): List<String> {
+        val manga = item.libraryManga.manga
+        return artistsFromDescription(manga.description).ifEmpty { splitAuthors(manga.artist) }
+    }
+
+    /** Houri+: studios credited in the description, else author/artist names that are studios. */
+    private fun studiosOf(item: LibraryItem): List<String> {
+        val manga = item.libraryManga.manga
+        return studiosFromDescription(manga.description).ifEmpty {
+            (splitAuthors(manga.author) + splitAuthors(manga.artist))
+                .filter { it.contains("studio", ignoreCase = true) }
+                .distinctBy { it.lowercase() }
+        }
+    }
+
+    /**
+     * Houri+: chapters per scanlator for every library entry (merged entries combine their sources).
+     * Chapters without a scanlator count under their source's name.
+     */
+    private suspend fun loadScanlatorCounts(): Map</* LibraryManga.id */ Long, Map<String, Long>> {
+        val rows = globalAppGraph.databaseHandler.awaitList { kmk_customQueries.libraryScanlatorCounts() }
+        val result = HashMap<Long, MutableMap<String, Long>>()
+        rows.forEach { row ->
+            val mangaId: Long = row.mangaId ?: return@forEach
+            val scanlator: String? = row.scanlator
+            val name = scanlator?.takeIf { it.isNotBlank() }
+                ?: sourceManager.getOrStub(row.sourceId).name.ifBlank { row.sourceId.toString() }
+            result.getOrPut(mangaId) { mutableMapOf() }.merge(name, row.chapterCount, Long::plus)
+        }
+        return result
+    }
+    // KMK <--
 
     /**
      * Drops covers that no library entry points at any more, once past the retention window.
@@ -689,7 +803,7 @@ class LibraryScreenModel(
         }
     }
 
-    private fun Map<Category, List</* LibraryItem */ Long>>.applySort(
+    private /* KMK --> */ suspend /* KMK <-- */ fun Map<Category, List</* LibraryItem */ Long>>.applySort(
         favoritesById: Map<Long, LibraryItem>,
         trackMap: Map<Long, List<Track>>,
         loggedInTrackerIds: Set<Long>,
@@ -748,6 +862,36 @@ class LibraryScreenModel(
             }
         }
 
+        // KMK --> Houri+ (custom build) sorts
+        val averageReaders by lazy {
+            favoritesById.mapValues { (_, item) ->
+                averageReadersFromDescription(item.libraryManga.manga.description) ?: -1.0
+            }
+        }
+        val firstAuthors by lazy {
+            favoritesById.mapValues { (_, item) -> splitAuthors(item.libraryManga.manga.author).firstOrNull() }
+        }
+        val firstArtists by lazy {
+            favoritesById.mapValues { (_, item) -> artistsOf(item).firstOrNull() }
+        }
+        val firstStudios by lazy {
+            favoritesById.mapValues { (_, item) -> studiosOf(item).firstOrNull() }
+        }
+        val mainScanlators = if (keys.any { (groupSort ?: it.sort).type == LibrarySort.Type.Scanlator }) {
+            loadScanlatorCounts().mapValues { (_, counts) -> counts.maxByOrNull { it.value }?.key }
+        } else {
+            emptyMap()
+        }
+
+        // Entries without a value always go last
+        fun compareNamesMissingLast(name1: String?, name2: String?, ascending: Boolean): Int = when {
+            name1 == name2 -> 0
+            name1 == null -> if (ascending) 1 else -1
+            name2 == null -> if (ascending) -1 else 1
+            else -> name1.lowercase().compareTo(name2.lowercase())
+        }
+        // KMK <--
+
         fun LibrarySort.comparator(): Comparator<LibraryItem> = Comparator { manga1, manga2 ->
             // SY -->
             val sort = groupSort ?: this
@@ -800,6 +944,23 @@ class LibraryScreenModel(
                     manga1IndexOfTag.compareTo(manga2IndexOfTag)
                 }
                 // SY <--
+                // KMK -->
+                LibrarySort.Type.Popularity -> {
+                    (averageReaders[manga1.id] ?: -1.0).compareTo(averageReaders[manga2.id] ?: -1.0)
+                }
+                LibrarySort.Type.Author -> {
+                    compareNamesMissingLast(firstAuthors[manga1.id], firstAuthors[manga2.id], sort.isAscending)
+                }
+                LibrarySort.Type.Artist -> {
+                    compareNamesMissingLast(firstArtists[manga1.id], firstArtists[manga2.id], sort.isAscending)
+                }
+                LibrarySort.Type.Studio -> {
+                    compareNamesMissingLast(firstStudios[manga1.id], firstStudios[manga2.id], sort.isAscending)
+                }
+                LibrarySort.Type.Scanlator -> {
+                    compareNamesMissingLast(mainScanlators[manga1.id], mainScanlators[manga2.id], sort.isAscending)
+                }
+                // KMK <--
             }
         }
 
@@ -2139,7 +2300,47 @@ class LibraryScreenModel(
         val excludedCategories: ImmutableSet<Long>,
         val categorySortMode: Int,
         val itemPreferences: ItemPreferences,
+        // KMK -->
+        val tagFilter: TagFilter,
+        // KMK <--
     )
+
+    // KMK -->
+    private data class CategoryFilterInputs(
+        val includedCategories: ImmutableSet<Long>,
+        val excludedCategories: ImmutableSet<Long>,
+        val categorySortMode: Int,
+        val tagFilter: TagFilter,
+    )
+
+    /** Houri+: filter the library by tags (ignoring case); included tags must all be present. */
+    private data class TagFilter(
+        val enabled: Boolean,
+        val included: Set<String>,
+        val excluded: Set<String>,
+    ) {
+        val isActive: Boolean get() = enabled && (included.isNotEmpty() || excluded.isNotEmpty())
+
+        fun matches(item: LibraryItem): Boolean {
+            val tags = item.libraryManga.manga.genre.orEmpty().mapTo(HashSet()) { it.trim().lowercase() }
+            return tags.none { it in excluded } && included.all { it in tags }
+        }
+    }
+
+    private fun getTagFilterFlow(): Flow<TagFilter> {
+        return combine(
+            libraryPreferences.filterTags().changes(),
+            libraryPreferences.filterTagsInclude().changes(),
+            libraryPreferences.filterTagsExclude().changes(),
+        ) { enabled, included, excluded ->
+            TagFilter(
+                enabled = enabled,
+                included = included.map { it.lowercase() }.toSet(),
+                excluded = excluded.map { it.lowercase() }.toSet(),
+            )
+        }.distinctUntilChanged()
+    }
+    // KMK <--
 
     /**
      * The inputs the category grouping/sorting pass needs, for the same reason as
@@ -2357,6 +2558,24 @@ class LibraryScreenModel(
     // KMK -->
     companion object {
         const val ACHIEVEMENTS_CATEGORY_ID = -100L
+
+        // Houri+ (custom build): ids of tag, author, artist, studio and scanlator tabs, far from real category ids
+        private const val TAG_TAB_ID = 2_000_000_000L
+        private const val AUTHOR_TAB_ID = 3_000_000_000L
+        private const val SCANLATOR_TAB_ID = 4_000_000_000L
+        private const val ARTIST_TAB_ID = 5_000_000_000L
+        private const val STUDIO_TAB_ID = 6_000_000_000L
+
+        private val AUTHOR_SEPARATORS = Regex("""\s*[,;/&]\s*""")
+
+        /** Houri+: author names from a manga's author field ("A, B & C" -> A, B, C). */
+        fun splitAuthors(author: String?): List<String> {
+            if (author.isNullOrBlank()) return emptyList()
+            return author.split(AUTHOR_SEPARATORS)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinctBy { it.lowercase() }
+        }
 
         /** Namespace prefixes that mean "match a tag", for the tag-search rotating tier. */
         private val TAG_NAMESPACES = setOf("tag", "tags")

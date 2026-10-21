@@ -152,6 +152,14 @@ data object LibraryTab : Tab {
                     LibraryGroup.BY_DEFAULT -> null
                     LibraryGroup.BY_SOURCE, LibraryGroup.BY_TRACK_STATUS -> category?.id?.toString()
                     LibraryGroup.BY_STATUS -> category?.id?.minus(1)?.toString()
+                    // KMK --> Houri+
+                    LibraryGroup.BY_TAG,
+                    LibraryGroup.BY_AUTHOR,
+                    LibraryGroup.BY_ARTIST,
+                    LibraryGroup.BY_STUDIO,
+                    LibraryGroup.BY_SCANLATOR,
+                    -> category?.let(screenModel::groupUpdateExtra)
+                    // KMK <--
                     else -> null
                 },
             )

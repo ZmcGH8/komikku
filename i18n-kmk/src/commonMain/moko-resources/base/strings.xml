@@ -766,4 +766,20 @@
     <string name="pref_custom_hidden_matches_empty">Nothing has been hidden by a name match yet</string>
     <string name="pref_custom_hidden_match_detail">%1$s · in your library as %2$s</string>
     <string name="action_custom_show_again">Show again</string>
+    <string name="action_sort_popularity">Popularity (Avg Readers)</string>
+    <string name="action_sort_author">Author</string>
+    <string name="action_sort_artist">Artist</string>
+    <string name="action_sort_studio">Studio</string>
+    <string name="action_sort_scanlator">Scanlator</string>
+    <string name="custom_group_by_tag">Tags</string>
+    <string name="custom_group_by_author">Authors</string>
+    <string name="custom_group_by_artist">Artists</string>
+    <string name="custom_group_by_studio">Studios</string>
+    <string name="custom_group_by_scanlator">Scanlators</string>
+    <string name="custom_group_no_tags">No tags</string>
+    <string name="custom_group_no_author">No author</string>
+    <string name="custom_group_no_artist">No artist</string>
+    <string name="custom_group_no_studio">No studio</string>
+    <string name="custom_group_no_chapters">No chapters</string>
+    <string name="custom_filter_tags_details">Checked: entries must have all of these tags. Crossed out: entries with any of these tags are hidden.</string>
 </resources>

@@ -12,6 +12,23 @@ object LibraryGroup {
     const val BY_TRACK_STATUS = 3
     const val UNGROUPED = 4
 
+    // KMK --> Houri+ (custom build), high values to stay clear of upstream
+    /** One tab per tag */
+    const val BY_TAG = 21
+
+    /** One tab per author */
+    const val BY_AUTHOR = 22
+
+    /** One tab per scanlator (or source, for chapters without a scanlator) */
+    const val BY_SCANLATOR = 23
+
+    /** One tab per artist */
+    const val BY_ARTIST = 24
+
+    /** One tab per studio (from the "Credits" in the entry's description) */
+    const val BY_STUDIO = 25
+    // KMK <--
+
     fun groupTypeStringRes(type: Int): StringResource {
         return when (type) {
             BY_STATUS -> MR.strings.status

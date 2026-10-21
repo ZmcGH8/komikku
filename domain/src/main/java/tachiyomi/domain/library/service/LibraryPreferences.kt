@@ -331,6 +331,13 @@ class LibraryPreferences(
     // KMK --> Houri+ (custom build)
     /** Merged entries show each chapter from one source, official sources first. */
     fun mergeOneSourcePerChapter() = preferenceStore.getBoolean("pref_custom_merge_one_source_per_chapter", true)
+
+    /** Filter the library by tags (included tags must all be present; any excluded tag hides). */
+    fun filterTags() = preferenceStore.getBoolean("pref_custom_filter_tags", false)
+
+    fun filterTagsInclude() = preferenceStore.getStringSet("pref_custom_filter_tags_include", emptySet())
+
+    fun filterTagsExclude() = preferenceStore.getStringSet("pref_custom_filter_tags_exclude", emptySet())
     // KMK <--
     fun showSmartScanlatorInDetails() = preferenceStore.getBoolean("pref_show_smart_scanlator_details", true)
     // KMK <--

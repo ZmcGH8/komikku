@@ -138,6 +138,14 @@ android {
         }
     }
 
+    // KMK --> Houri+ (custom build) sets its app name through a resource value
+    if (project.hasProperty("custom-app")) {
+        buildFeatures {
+            resValues = true
+        }
+    }
+    // KMK <--
+
     sourceSets {
         getByName("preview").res.srcDirs("src/beta/res")
         getByName("benchmark").res.srcDirs("src/debug/res")

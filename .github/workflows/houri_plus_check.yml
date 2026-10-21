@@ -1,0 +1,65 @@
+# KMK -->
+# Houri+ (custom build): a quick Kotlin compile check that runs next to the full build, so code errors show up
+# in minutes instead of after the native libraries are built. Logs go to the "ci-logs-check" branch.
+name: Houri+ compile check
+
+on:
+  push:
+    branches:
+      - houri-plus
+  workflow_dispatch:
+
+concurrency:
+  group: houri-plus-check
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Compile Houri+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version-file: .github/.java-version
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile
+        env:
+          JAVA_TOOL_OPTIONS: -Xmx4g
+        run: |
+          set -o pipefail
+          ./gradlew :app:compileMtlPreviewKotlin -Pcustom-app --max-workers=4 --continue --console=plain 2>&1 | tee build.log
+
+      - name: Unit tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew :domain:testDebugUnitTest --continue --console=plain 2>&1 | tee -a build.log
+
+      - name: Save the log
+        if: always()
+        run: |
+          mkdir -p /tmp/log
+          cp build.log /tmp/log/ 2>/dev/null || echo "no build log" > /tmp/log/build.log
+          grep -E "^e: |error:|FAILED|What went wrong|BUILD (SUCCESSFUL|FAILED)|tests completed" -A3 /tmp/log/build.log > /tmp/log/errors.txt || true
+          echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > /tmp/log/result.txt
+          echo "commit: $(git rev-parse HEAD)" >> /tmp/log/result.txt
+          echo "result: ${{ job.status }}" >> /tmp/log/result.txt
+          cd /tmp/log
+          git init -q -b ci-logs-check
+          git config user.name "houri-plus-bot"
+          git config user.email "houri-plus-bot@users.noreply.github.com"
+          git add -A && git commit -qm "houri-plus check ${{ job.status }} (run ${{ github.run_id }})"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-check
+# KMK <--

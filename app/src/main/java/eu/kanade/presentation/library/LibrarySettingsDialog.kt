@@ -266,6 +266,9 @@ private fun ColumnScope.SortPage(
             // SY -->
             tagSortPair,
             // SY <--
+            // KMK -->
+            KMR.strings.action_sort_popularity to LibrarySort.Type.Popularity,
+            // KMK <--
             MR.strings.action_sort_random to LibrarySort.Type.Random,
         )
     }

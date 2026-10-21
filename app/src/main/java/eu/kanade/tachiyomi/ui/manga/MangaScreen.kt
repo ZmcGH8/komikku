@@ -645,11 +645,25 @@ class MangaScreen(
         }
 
         if (showScanlatorsDialog) {
+            // KMK -->
+            val scanlatorPriority = remember { screenModel.getScanlatorPriority() }
+            val chapterCounts = remember(successState.chapters) {
+                successState.chapters
+                    .mapNotNull { it.chapter.scanlator?.trim()?.takeIf(String::isNotEmpty) }
+                    .groupingBy { it }
+                    .eachCount()
+            }
+            // KMK <--
             ScanlatorFilterDialog(
                 availableScanlators = successState.availableScanlators,
                 excludedScanlators = successState.excludedScanlators,
                 onDismissRequest = { showScanlatorsDialog = false },
                 onConfirm = screenModel::setExcludedScanlators,
+                // KMK -->
+                scanlatorPriority = scanlatorPriority,
+                chapterCounts = chapterCounts,
+                onConfirmPriority = screenModel::setScanlatorPriority,
+                // KMK <--
             )
         }
     }

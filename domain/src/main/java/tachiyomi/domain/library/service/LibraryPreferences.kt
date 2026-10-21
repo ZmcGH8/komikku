@@ -283,6 +283,9 @@ class LibraryPreferences(
     fun filterTagsInclude() = preferenceStore.getStringSet("pref_custom_filter_tags_include", emptySet())
 
     fun filterTagsExclude() = preferenceStore.getStringSet("pref_custom_filter_tags_exclude", emptySet())
+
+    /** Custom build: preferred scanlator order per entry, see [tachiyomi.domain.chapter.model.ScanlatorPriority]. */
+    fun scanlatorPriority() = preferenceStore.getString("pref_custom_scanlator_priority", "")
     // KMK <--
 
     companion object {

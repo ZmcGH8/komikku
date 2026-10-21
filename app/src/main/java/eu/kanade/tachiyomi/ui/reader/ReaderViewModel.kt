@@ -89,6 +89,7 @@ import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.model.ChapterUpdate
+import tachiyomi.domain.chapter.model.ScanlatorPriority
 import tachiyomi.domain.chapter.service.getChapterSort
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.history.interactor.GetNextChapters
@@ -329,7 +330,12 @@ class ReaderViewModel @JvmOverloads constructor(
             .sortedWith(getChapterSort(manga, sortDescending = false))
             .run {
                 if (readerPreferences.skipDupe().get()) {
-                    removeDuplicates(selectedChapter)
+                    removeDuplicates(
+                        selectedChapter,
+                        // KMK -->
+                        ScanlatorPriority.get(libraryPreferences, manga),
+                        // KMK <--
+                    )
                 } else {
                     this
                 }
@@ -731,7 +737,12 @@ class ReaderViewModel @JvmOverloads constructor(
 
             val chaptersToDownload = getNextChapters.await(manga.id, nextChapter.id!!).run {
                 if (readerPreferences.skipDupe().get()) {
-                    removeDuplicates(nextChapter.toDomainChapter()!!)
+                    removeDuplicates(
+                        nextChapter.toDomainChapter()!!,
+                        // KMK -->
+                        ScanlatorPriority.get(libraryPreferences, manga),
+                        // KMK <--
+                    )
                 } else {
                     this
                 }

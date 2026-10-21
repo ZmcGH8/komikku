@@ -126,6 +126,7 @@ import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.model.NoChaptersException
+import tachiyomi.domain.chapter.model.ScanlatorPriority
 import tachiyomi.domain.chapter.service.calculateChapterGap
 import tachiyomi.domain.chapter.service.getChapterSort
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -1940,6 +1941,19 @@ class MangaScreenModel(
             setExcludedScanlators.await(mangaId, excludedScanlators)
         }
     }
+
+    // KMK -->
+    /** Custom build: preferred scanlator order used when skipping duplicate chapters. */
+    fun getScanlatorPriority(): List<String> {
+        val manga = successState?.manga ?: return emptyList()
+        return ScanlatorPriority.get(libraryPreferences, manga)
+    }
+
+    fun setScanlatorPriority(order: List<String>) {
+        val manga = successState?.manga ?: return
+        ScanlatorPriority.set(libraryPreferences, manga, order)
+    }
+    // KMK <--
 
     // SY -->
     fun showEditMangaInfoDialog() {

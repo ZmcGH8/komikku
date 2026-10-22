@@ -103,9 +103,24 @@ class MergedSource : HttpSource() {
 
             val mangaInfoReference = mangaReferences.firstOrNull { it.isInfoManga }
                 ?: mangaReferences.firstOrNull { it.mangaId != it.mergeId }
-            val dbManga = mangaInfoReference?.run {
-                getManga.await(mangaUrl, mangaSourceId)?.toSManga()
+            // KMK --> Houri+: the info source's own details are loaded fresh, so a merge made before its sources had
+            // loaded (or whose info source only has a search-result cover) shows that source's title, description and
+            // cover instead of staying blank
+            val infoChild = mangaInfoReference?.run { getManga.await(mangaUrl, mangaSourceId) }
+            val refreshedInfo = infoChild?.let { child ->
+                try {
+                    updateMangaFromRemote(
+                        source = sourceManager.getOrStub(child.source),
+                        manga = child,
+                        fetchDetails = true,
+                    ).getOrThrow().manga
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    null
+                }
             }
+            val dbManga = (refreshedInfo ?: infoChild)?.toSManga()
+            // KMK <--
             // KMK --> Houri+: take the status from the merged source that has reached the highest chapter,
             // so an official source's hiatus doesn't override a scan that is still releasing
             val infoManga = dbManga ?: mergedManga.toSManga()
@@ -117,6 +132,7 @@ class MergedSource : HttpSource() {
                 }
             // Refresh that source's details so its status is current
             val statusFromFurthestSource = furthestSource?.let { child ->
+                if (refreshedInfo != null && child.id == refreshedInfo.id) return@let refreshedInfo
                 val refreshed = try {
                     updateMangaFromRemote(
                         source = sourceManager.getOrStub(child.source),

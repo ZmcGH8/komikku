@@ -269,6 +269,13 @@ class MangaRestorer(
     }
 
     private suspend fun restoreExistingManga(manga: Manga, dbManga: Manga): Manga {
+        // KMK --> Houri+: a replaced library takes the backup's entry as it is - title, details, cover, status,
+        // library state. Mixing it with the app's row kept the app's blank details on merges made before their
+        // sources had loaded (the backup's own details were thrown away).
+        if (replaceLibrary) {
+            return updateManga(manga.copy(id = dbManga.id, version = max(manga.version, dbManga.version)))
+        }
+        // KMK <--
         return if (manga.version > dbManga.version) {
             updateManga(dbManga.copyFrom(manga).copy(id = dbManga.id))
         } else {

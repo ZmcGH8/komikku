@@ -20,5 +20,7 @@ files moved. See .github/scripts/release_notes.py.
 ### Fix
 
 - Restored merges kept only their scan sources and lost the official one.
+- Replace library takes each entry's title, details and cover from the backup, so merges made before their sources loaded no longer stay blank.
+- Refreshing a merged entry also refreshes its info source, so it shows that source's own title, description and cover.
 - WEBTOON covers on merged entries and custom covers load (their image server needs WEBTOON as referer).
 - Entries that were never updated (rebuilt merges, entries moved to another source) are always fetched by a library update, whatever the skip settings.

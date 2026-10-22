@@ -247,7 +247,9 @@ class BackupRestorer(
                 val label = context.stringResource(KMR.strings.restore_pushing_tracking)
                 val result = TrackingPusher().pushLibrary { done, total ->
                     if (done % 10 == 0 || done == total) {
-                        notifier.showRestoreProgress(label, done, total, isSync).show(Notifications.ID_RESTORE_PROGRESS)
+                        with(notifier) {
+                            showRestoreProgress(label, done, total, isSync).show(Notifications.ID_RESTORE_PROGRESS)
+                        }
                     }
                 }
                 result.failed.forEach { errors.add(Date() to it) }

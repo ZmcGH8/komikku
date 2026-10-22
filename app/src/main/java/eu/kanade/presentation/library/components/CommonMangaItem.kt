@@ -53,6 +53,7 @@ import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalCensorEnabled
 import tachiyomi.presentation.core.util.selectedBackground
+import kotlin.math.absoluteValue
 import tachiyomi.domain.manga.model.MangaCover as MangaCoverModel
 
 object CommonMangaItemDefaults {
@@ -239,6 +240,10 @@ fun MangaComfortableGridItem(
     val shouldCensor = censorEnabled && isLewd
     val displayTitle = if (shouldCensor) stringResource(KMR.strings.censored_title) else title
     val coverIsWide = coverRatio.floatValue <= RatioSwitchToPanorama
+    // KMK --> Houri+: a cover that isn't close to the 2:3 book shape (square series images, wide or extra-tall
+    // posters) is shown whole instead of being cropped, so its title isn't cut off
+    val coverIsOffShape = (coverRatio.floatValue - BOOK_HEIGHT_PER_WIDTH).absoluteValue > COVER_SHAPE_TOLERANCE
+    // KMK <--
     val bgColor = coverData.dominantCoverColors?.first?.let { Color(it) }.takeIf { libraryColored && !shouldCensor }
     val onBgColor = coverData.dominantCoverColors?.second.takeIf { libraryColored && !shouldCensor }
     GridItemSelectable(
@@ -284,7 +289,7 @@ fun MangaComfortableGridItem(
                                     val image = result.result.image
                                     coverRatio.floatValue = image.height.toFloat() / image.width
                                 },
-                                scale = if (usePanoramaCover && coverIsWide) {
+                                scale = if ((usePanoramaCover && coverIsWide) || coverIsOffShape) {
                                     ContentScale.Fit
                                 } else {
                                     ContentScale.Crop
@@ -527,3 +532,8 @@ private fun ContinueReadingButton(
         }
     }
 }
+
+// KMK --> Houri+
+private const val BOOK_HEIGHT_PER_WIDTH = 1.5f
+private const val COVER_SHAPE_TOLERANCE = 0.12f
+// KMK <--

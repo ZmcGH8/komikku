@@ -19,8 +19,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import mihon.app.di.globalAppGraph
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
@@ -199,11 +197,6 @@ class MergedSource : HttpSource() {
                     if (e is CancellationException) throw e
                 }
             }
-            try {
-                applyCarriedReadProgress(manga.id)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-            }
             // KMK <--
             exception?.let { throw it }
         }
@@ -228,11 +221,11 @@ class MergedSource : HttpSource() {
      * Houri+: read progress carried in by a backup. When a merge is rebuilt without the old library copy
      * (e.g. an aggregator), the backup stores the chapter numbers that were read in the merged entry's memo
      * ("1-154,156.5"). After a sync, chapters with those numbers are marked read; numbers that were found are
-     * dropped and the key is removed once every number has turned up.
+     * dropped and the key is removed once every number has turned up. [raw] is read by the caller before the
+     * info source's details replace the memo.
      */
-    private suspend fun applyCarriedReadProgress(mergeId: Long) {
+    suspend fun applyCarriedReadProgress(mergeId: Long, raw: String) {
         val head = getManga.await(mergeId) ?: return
-        val raw = head.memo[CARRIED_READ_MEMO_KEY]?.jsonPrimitive?.contentOrNull ?: return
         val wanted = parseChapterRanges(raw)
         val chapters = getMergedChaptersByMangaId.await(mergeId, dedupe = false)
         val updates = chapters

@@ -9,13 +9,21 @@ import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.online.all.CARRIED_READ_MEMO_KEY
 import eu.kanade.tachiyomi.source.online.all.EHentai
 import eu.kanade.tachiyomi.source.online.all.MergedSource
+import eu.kanade.tachiyomi.source.online.all.formatChapterRanges
+import eu.kanade.tachiyomi.source.online.all.parseChapterRanges
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import logcat.LogPriority
 import mihon.domain.source.models.RemoteMangaUpdate
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.model.Manga
@@ -89,6 +97,9 @@ class UpdateMangaFromRemote(
         // SY <--
     ): Result<RemoteMangaUpdate> {
         return try {
+            // KMK --> Houri+: read before the source's details overwrite the memo
+            val carriedRead = manga.memo[CARRIED_READ_MEMO_KEY]?.jsonPrimitive?.contentOrNull
+            // KMK <--
             val chapters = chapterRepository.getChapterByMangaId(manga.id)
                 .sortedBy { it.sourceOrder }
             val update = withIOContext {
@@ -128,6 +139,19 @@ class UpdateMangaFromRemote(
                         fetchWindow = fetchWindow,
                     )
                 }
+                // KMK --> Houri+: read progress carried in by a backup (entry migrated to another source)
+                if (fetchChapters && carriedRead != null) {
+                    try {
+                        if (source is MergedSource) {
+                            source.applyCarriedReadProgress(manga.id, carriedRead)
+                        } else {
+                            applyCarriedReadProgress(manga.id, carriedRead)
+                        }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e)
+                    }
+                }
+                // KMK <--
                 val updatedManga = mangaRepository.getMangaById(manga.id)
                 // KMK -->
                 RemoteMangaUpdate(manga = updatedManga, newChapters = newChapters)
@@ -139,6 +163,30 @@ class UpdateMangaFromRemote(
             Result.failure(e)
         }
     }
+
+    // KMK -->
+    /**
+     * Houri+: a backup can move an entry to another source (e.g. from an aggregator to the scan group) and store the
+     * chapter numbers that were read in the entry's memo ("1-154,156.5"). Once the new source's chapters are in,
+     * mark those read; numbers that were found are dropped and the key goes away when all have turned up.
+     */
+    private suspend fun applyCarriedReadProgress(mangaId: Long, raw: String) {
+        val current = mangaRepository.getMangaById(mangaId)
+        val wanted = parseChapterRanges(raw)
+        val chapters = chapterRepository.getChapterByMangaId(mangaId)
+        val updates = chapters
+            .filter { !it.read && it.isRecognizedNumber && it.chapterNumber in wanted }
+            .map { ChapterUpdate(id = it.id, read = true) }
+        if (updates.isNotEmpty()) chapterRepository.updateAll(updates)
+        val found = chapters.filter { it.isRecognizedNumber }.mapTo(HashSet()) { it.chapterNumber }
+        val left = wanted - found
+        val memo = buildJsonObject {
+            current.memo.forEach { (key, value) -> if (key != CARRIED_READ_MEMO_KEY) put(key, value) }
+            if (left.isNotEmpty()) put(CARRIED_READ_MEMO_KEY, JsonPrimitive(formatChapterRanges(left)))
+        }
+        mangaRepository.update(MangaUpdate(id = mangaId, memo = memo))
+    }
+    // KMK <--
 
     private suspend fun awaitUpdateFromSource(
         localManga: Manga,

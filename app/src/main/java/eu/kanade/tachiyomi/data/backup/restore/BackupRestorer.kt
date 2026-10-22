@@ -241,6 +241,20 @@ class BackupRestorer(
                 // KMK <--
             }
 
+            // KMK --> Houri+: the backup's tracking goes out to the trackers before the library update, which would
+            // otherwise read the trackers' old numbers back into the library
+            if (options.libraryEntries && options.pushTracking) {
+                val label = context.stringResource(KMR.strings.restore_pushing_tracking)
+                val result = TrackingPusher().pushLibrary { done, total ->
+                    if (done % 10 == 0 || done == total) {
+                        notifier.showRestoreProgress(label, done, total, isSync).show(Notifications.ID_RESTORE_PROGRESS)
+                    }
+                }
+                result.failed.forEach { errors.add(Date() to it) }
+                logcat(LogPriority.INFO) { "Tracking sent: ${result.sent}, failed: ${result.failed.size}" }
+            }
+            // KMK <--
+
             // KMK --> After the scope, not inside it. The restore above is a `launch`, so
             // anything enqueued from inside the scope started while the restore was still
             // writing. A full library refresh reads and writes every entry on the same
@@ -343,6 +357,7 @@ class BackupRestorer(
         val mangaStart = SystemClock.elapsedRealtime()
         // KMK --> Houri+: the backup's own library entries, for "Replace library"
         val backupLibrary = HashSet<Pair<Long, String>>()
+        mangaRestorer.replaceLibrary = replaceLibrary
         // KMK <--
         val decoder = BackupDecoder(context)
         val phaseOf = mangaRestorer.phaseMatcher()

@@ -37,8 +37,15 @@ import java.util.concurrent.ConcurrentHashMap
  * 2. the user confirmed it (or it was matched before) and its library entry is still in the library; or
  * 3. its whole title is exactly one of the library entry's names (display title, source title, merged
  *    sources' titles, or the "Alternative Names" in its description) after ignoring case, accents and
- *    punctuation, AND its author or artist is one of the library entry's creators. When the source's list
- *    doesn't include the author, the entry's details are fetched once to get it.
+ *    punctuation, AND its author or artist is one of the library entry's creators - spelled the same or as
+ *    another romanization of the same name ("Yu Jin-Sung" / "Jinseong Yu", "Gamtwiiii" / "Gamtwieii").
+ *    When the source's list doesn't include the author, the entry's details are fetched once to get it;
+ * 4. or the source names no author at all (many only give a title), and the title is a distinctive name of
+ *    exactly one library entry (three or more meaningful words, or a long name), so it can't be another
+ *    series with a common title.
+ *
+ * Matches remembered by earlier, looser versions of these rules are checked again: one is kept only when its
+ * title is still a distinctive name of that library entry. Matches the user confirmed always stay.
  *
  * Entries that look like the same title but don't match on both name and author go to a review list
  * instead, and stay visible until the user confirms them:
@@ -100,15 +107,26 @@ class LibraryMatcher(
         val key = key(manga.source, manga.url)
         try {
             var creators = creatorsOf(manga.author, manga.artist)
+            var detailsFailed = false
             if (creators.isEmpty()) {
                 // The source's list didn't include the author: read it from the entry's details (once)
-                creators = fetchCreators(manga) ?: return false
+                val fetched = fetchCreators(manga)
+                detailsFailed = fetched == null
+                creators = fetched.orEmpty()
             }
             val match = sameName.firstOrNull { libraryId -> index.creators[libraryId].orEmpty().any { it in creators } }
             if (match != null) {
                 remember(manga, match, index)
                 return true
             }
+            // The source names nobody: a distinctive name that only one library entry has is enough
+            val normalized = normalizeTitle(manga.title)
+            if (creators.isEmpty() && sameName.size == 1 && isDistinctive(normalized)) {
+                // Not remembered when the details couldn't be loaded, so it is checked again next time
+                if (!detailsFailed) remember(manga, sameName.first(), index)
+                return true
+            }
+            if (detailsFailed) return false
             val reason = if (creators.isEmpty()) REASON_SAME_NAME_NO_AUTHOR else REASON_SAME_NAME_OTHER_AUTHOR
             addToReview(manga, sameName.first(), index, reason, creators)
             return false
@@ -234,8 +252,23 @@ class LibraryMatcher(
 
         // Forget remembered matches and review items whose library entry was removed from the library
         val remembered = ConcurrentHashMap<String, Long>()
-        prune(sourcePreferences.hiddenLibraryMatches().get(), libraryTitles.keys) { kept ->
-            sourcePreferences.hiddenLibraryMatches().set(kept)
+        // ... and, for matches made by an earlier, looser version of the rules, ones that no longer hold
+        val hiddenPref = sourcePreferences.hiddenLibraryMatches()
+        val stillValid = hiddenPref.get().filter { entry ->
+            val parts = entry.split('\t')
+            val libraryId = parts.getOrNull(2)?.toLongOrNull() ?: return@filter true
+            when (parts.getOrNull(5)) {
+                MARK_USER, MARK_CHECKED -> true
+                else -> {
+                    val name = normalizeTitle(parts.getOrNull(3).orEmpty())
+                    val owners = nameIndex[name].orEmpty()
+                    libraryId !in libraryTitles || (libraryId in owners && owners.size == 1 && isDistinctive(name))
+                }
+            }
+        }.toSet()
+        if (stillValid.size != hiddenPref.get().size) hiddenPref.set(stillValid)
+        prune(hiddenPref.get(), libraryTitles.keys) { kept ->
+            hiddenPref.set(kept)
         }.forEach { (key, libraryId) -> remembered[key] = libraryId }
         val reviewKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
         prune(sourcePreferences.libraryMatchReview().get(), libraryTitles.keys) { kept ->
@@ -298,6 +331,7 @@ class LibraryMatcher(
                 libraryId.toString(),
                 manga.title,
                 index.libraryTitles[libraryId].orEmpty(),
+                MARK_CHECKED,
             ).joinToString("\t") { it.clean() }
             pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
         }
@@ -308,7 +342,7 @@ class LibraryMatcher(
         index.reviewKeys.add(key)
         val sourceAuthor = listOfNotNull(manga.author, manga.artist).filter { it.isNotBlank() }.distinct()
             .joinToString()
-            .ifEmpty { creators.joinToString() }
+            .ifEmpty { creators.filterNot { it.startsWith("~") }.joinToString() }
         storeMutex.withLock {
             val pref = sourcePreferences.libraryMatchReview()
             val entry = listOf(
@@ -395,6 +429,10 @@ class LibraryMatcher(
     companion object {
         private val storeMutex = Mutex()
 
+        /** Marks a remembered match made by these rules ([MARK_CHECKED]) or confirmed by the user ([MARK_USER]). */
+        private const val MARK_CHECKED = "v2"
+        private const val MARK_USER = "user"
+
         const val REASON_SAME_NAME_OTHER_AUTHOR = "author"
         const val REASON_SAME_NAME_NO_AUTHOR = "noauthor"
         const val REASON_SIMILAR_NAME_SAME_AUTHOR = "similar"
@@ -474,19 +512,62 @@ class LibraryMatcher(
         }
 
         /**
-         * Creator names for comparing, ignoring case, accents, spaces and punctuation
-         * ("Yu Jin-Sung" and "yu jinsung" are the same).
+         * A name only one series is likely to have: three or more meaningful words, or a long name.
+         * "Player", "The Gamer" or "Reincarnator" are not.
+         */
+        fun isDistinctive(normalized: String): Boolean =
+            significantTokens(normalized).size >= 3 || normalized.replace(" ", "").length >= 16
+
+        private val VOWELS_AND_GLIDES = Regex("[aeiouywh]")
+        private val REPEATS = Regex("(.)\\1+")
+        private val LATIN_WORD = Regex("[a-z]+")
+
+        /**
+         * The consonants of a romanized word: romanizations of one Korean or Chinese name differ mostly in vowels
+         * and in g/k, d/t, b/p, j/ch, r/l ("Jin-Seong" / "Jinsung", "Mun" / "Moon", "Gamtwiiii" / "Gamtwieii").
+         */
+        private fun skeleton(word: String): String {
+            var w = word
+            for ((from, to) in ROMANIZATION_PAIRS) w = w.replace(from, to)
+            w = w.map { CONSONANT_CLASS[it] ?: it }.joinToString("")
+            return w.replace(VOWELS_AND_GLIDES, "").replace(REPEATS, "$1")
+        }
+
+        private val ROMANIZATION_PAIRS = listOf(
+            "ch" to "j", "sh" to "s", "ph" to "f", "ck" to "k", "c" to "k", "q" to "k", "x" to "ks", "z" to "j",
+        )
+        private val CONSONANT_CLASS = mapOf('k' to 'g', 't' to 'd', 'p' to 'b', 'l' to 'r', 'v' to 'b')
+
+        /**
+         * Creator names for comparing, ignoring case, accents, spaces and punctuation ("Yu Jin-Sung" and
+         * "yu jinsung" are the same), word order ("Jin-Sung Yu") and the usual romanization differences of a
+         * name ("Yu Jinseong"). Each name gives a few comparison keys; two names match when they share one.
          */
         fun creatorsOf(vararg values: String?): Set<String> {
             return values.flatMap { value ->
                 if (value.isNullOrBlank()) {
                     emptyList()
                 } else {
-                    value.split(CREATOR_SEPARATORS).map { normalizeTitle(it).replace(" ", "") }
+                    value.split(CREATOR_SEPARATORS).flatMap { creatorKeys(it) }
+                }
+            }.toSet()
+        }
+
+        private fun creatorKeys(name: String): List<String> {
+            val split = normalizeTitle(name)                       // "Jin-Seong Yu" -> "jin seong yu"
+            val joined = normalizeTitle(name.replace("-", ""))     // "Jin-Seong Yu" -> "jinseong yu"
+            val whole = split.replace(" ", "")
+            if (whole.length < 3) return emptyList()
+            val keys = mutableListOf(whole)
+            for (form in listOf(split, joined)) {
+                val words = form.split(' ').filter { it.isNotEmpty() }
+                if (words.size > 1) keys += words.sorted().joinToString("")
+                if (words.isNotEmpty() && words.all { LATIN_WORD.matches(it) }) {
+                    val sk = words.map { skeleton(it) }.filter { it.isNotEmpty() }.sorted().joinToString("")
+                    if (sk.length >= 4) keys += "~$sk"
                 }
             }
-                .filter { it.length >= 3 }
-                .toSet()
+            return keys.distinct()
         }
 
         fun parseHiddenMatches(entries: Set<String>): List<HiddenMatch> {
@@ -537,7 +618,7 @@ class LibraryMatcher(
                 pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet())
             }
             sourcePreferences.hiddenLibraryMatches().let { pref ->
-                val entry = listOf(item.sourceId.toString(), item.url, item.libraryId.toString(), item.title, item.libraryTitle)
+                val entry = listOf(item.sourceId.toString(), item.url, item.libraryId.toString(), item.title, item.libraryTitle, MARK_USER)
                     .joinToString("\t") { it.clean() }
                 pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
             }

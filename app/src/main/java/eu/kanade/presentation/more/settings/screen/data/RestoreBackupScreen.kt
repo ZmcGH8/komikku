@@ -96,7 +96,11 @@ class RestoreBackupScreen(
                     // section below what is being read from the backup.
                     item {
                         SectionCard {
-                            listOf(RestoreOptions.updateLibraryEntry, RestoreOptions.replaceLibraryEntry).forEach { entry ->
+                            listOf(
+                                RestoreOptions.updateLibraryEntry,
+                                RestoreOptions.replaceLibraryEntry,
+                                RestoreOptions.pushTrackingEntry,
+                            ).forEach { entry ->
                                 LabeledCheckbox(
                                     label = stringResource(entry.label),
                                     checked = entry.getter(state.options),

@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.all.CARRIED_READ_MEMO_KEY
+import eu.kanade.tachiyomi.source.online.all.READ_UP_TO_MEMO_KEY
 import eu.kanade.tachiyomi.source.online.all.EHentai
 import eu.kanade.tachiyomi.source.online.all.MergedSource
 import eu.kanade.tachiyomi.source.online.all.formatChapterRanges
@@ -99,6 +100,7 @@ class UpdateMangaFromRemote(
         return try {
             // KMK --> Houri+: read before the source's details overwrite the memo
             val carriedRead = manga.memo[CARRIED_READ_MEMO_KEY]?.jsonPrimitive?.contentOrNull
+            val readUpTo = manga.memo[READ_UP_TO_MEMO_KEY]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()
             // KMK <--
             val chapters = chapterRepository.getChapterByMangaId(manga.id)
                 .sortedBy { it.sourceOrder }
@@ -151,6 +153,17 @@ class UpdateMangaFromRemote(
                         logcat(LogPriority.WARN, e)
                     }
                 }
+                if (fetchChapters && readUpTo != null) {
+                    try {
+                        if (source is MergedSource) {
+                            source.applyReadUpTo(manga.id, readUpTo)
+                        } else {
+                            applyReadUpTo(manga.id, readUpTo)
+                        }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e)
+                    }
+                }
                 // KMK <--
                 val updatedManga = mangaRepository.getMangaById(manga.id)
                 // KMK -->
@@ -170,6 +183,24 @@ class UpdateMangaFromRemote(
      * chapter numbers that were read in the entry's memo ("1-154,156.5"). Once the new source's chapters are in,
      * mark those read; numbers that were found are dropped and the key goes away when all have turned up.
      */
+    /** Houri+: exact read progress from a backup - see [READ_UP_TO_MEMO_KEY]. */
+    private suspend fun applyReadUpTo(mangaId: Long, upTo: Double) {
+        val chapters = chapterRepository.getChapterByMangaId(mangaId).filter { it.isRecognizedNumber }
+        if (chapters.isEmpty()) return
+        val updates = chapters.mapNotNull {
+            val read = it.chapterNumber <= upTo + 1e-9
+            when {
+                read && !it.read -> ChapterUpdate(id = it.id, read = true)
+                !read && it.read -> ChapterUpdate(id = it.id, read = false, lastPageRead = 0)
+                else -> null
+            }
+        }
+        if (updates.isNotEmpty()) chapterRepository.updateAll(updates)
+        val current = mangaRepository.getMangaById(mangaId)
+        val memo = buildJsonObject { current.memo.forEach { (key, value) -> if (key != READ_UP_TO_MEMO_KEY) put(key, value) } }
+        mangaRepository.update(MangaUpdate(id = mangaId, memo = memo))
+    }
+
     private suspend fun applyCarriedReadProgress(mangaId: Long, raw: String) {
         val current = mangaRepository.getMangaById(mangaId)
         val wanted = parseChapterRanges(raw)

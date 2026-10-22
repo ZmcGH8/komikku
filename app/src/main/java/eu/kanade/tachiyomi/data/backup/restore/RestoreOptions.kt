@@ -28,6 +28,11 @@ data class RestoreOptions(
      * exactly the backup's links. Default off: it is for restoring a whole prepared library.
      */
     val replaceLibrary: Boolean = false,
+    /**
+     * Houri+: after restoring, send every library entry's tracking (status, chapters read, score, dates) to the
+     * logged-in trackers, so the lists on MyAnimeList, AniList, Anime-Planet... match the backup. Default off.
+     */
+    val pushTracking: Boolean = false,
     // KMK <--
 ) {
 
@@ -43,6 +48,7 @@ data class RestoreOptions(
         // KMK -->
         updateLibrary,
         replaceLibrary,
+        pushTracking,
         // KMK <--
     )
 
@@ -107,6 +113,7 @@ data class RestoreOptions(
             // KMK -->
             updateLibrary = array.getOrNull(6) ?: true,
             replaceLibrary = array.getOrNull(7) ?: false,
+            pushTracking = array.getOrNull(8) ?: false,
             // KMK <--
         )
 
@@ -127,6 +134,13 @@ data class RestoreOptions(
             label = KMR.strings.restore_replace_library,
             getter = RestoreOptions::replaceLibrary,
             setter = { options, enabled -> options.copy(replaceLibrary = enabled) },
+        )
+
+        /** Houri+: see [RestoreOptions.pushTracking]. */
+        val pushTrackingEntry = Entry(
+            label = KMR.strings.restore_push_tracking,
+            getter = RestoreOptions::pushTracking,
+            setter = { options, enabled -> options.copy(pushTracking = enabled) },
         )
         // KMK <--
     }

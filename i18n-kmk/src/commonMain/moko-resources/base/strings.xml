@@ -609,6 +609,8 @@
     <string name="backup_included_categories">Included categories</string>
     <string name="restore_update_library">Update library after restore</string>
     <string name="restore_replace_library">Replace library: take entries and merge links that aren\'t in the backup out of the library</string>
+    <string name="restore_push_tracking">Send tracking to trackers: after restoring, update MyAnimeList, AniList, Anime-Planet and other logged-in trackers to the backup\'s status, chapters and scores</string>
+    <string name="restore_pushing_tracking">Sending tracking to trackers</string>
     <string name="pref_yakuyomi_prompt_title">Translation prompts</string>
     <string name="pref_yakuyomi_prompt_custom_instructions">Custom translation instructions</string>
     <string name="pref_yakuyomi_prompt_custom_instructions_summary">Additional style, tone, or terminology guidance applied to every provider</string>

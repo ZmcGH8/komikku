@@ -241,6 +241,28 @@ class MergedSource : HttpSource() {
         updateManga.await(MangaUpdate(id = mergeId, memo = memo))
     }
 
+    /**
+     * Houri+: exact read progress set by a backup ("houri.readUpTo" in the merged entry's memo): every chapter up to
+     * that number is read, every later one unread - across all merged sources. Applied once the merge has chapters,
+     * then the key is removed.
+     */
+    suspend fun applyReadUpTo(mergeId: Long, upTo: Double) {
+        val head = getManga.await(mergeId) ?: return
+        val chapters = getMergedChaptersByMangaId.await(mergeId, dedupe = false).filter { it.isRecognizedNumber }
+        if (chapters.isEmpty()) return
+        val updates = chapters.mapNotNull {
+            val read = it.chapterNumber <= upTo + 1e-9
+            when {
+                read && !it.read -> ChapterUpdate(id = it.id, read = true)
+                !read && it.read -> ChapterUpdate(id = it.id, read = false, lastPageRead = 0)
+                else -> null
+            }
+        }
+        if (updates.isNotEmpty()) updateChapter.awaitAll(updates)
+        val memo = buildJsonObject { head.memo.forEach { (key, value) -> if (key != READ_UP_TO_MEMO_KEY) put(key, value) } }
+        updateManga.await(MangaUpdate(id = mergeId, memo = memo))
+    }
+
     suspend fun MergedMangaReference.load(): LoadedMangaSource {
         var manga = getManga.await(mangaUrl, mangaSourceId)
         val source = sourceManager.getOrStub(manga?.source ?: mangaSourceId)
@@ -269,6 +291,9 @@ class MergedSource : HttpSource() {
 
 // KMK --> Houri+: chapter numbers read before a merge was rebuilt from a backup
 const val CARRIED_READ_MEMO_KEY = "houri.readChapters"
+
+/** Houri+: exact read progress from a backup: chapters up to this number read, later ones unread. */
+const val READ_UP_TO_MEMO_KEY = "houri.readUpTo"
 
 /** "1-3,5.5,8" -> {1, 2, 3, 5.5, 8}; ranges cover whole chapters only. */
 internal fun parseChapterRanges(text: String): Set<Double> {

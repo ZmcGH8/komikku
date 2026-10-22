@@ -10,6 +10,14 @@ files moved. See .github/scripts/release_notes.py.
 
 ### New
 
+- **Restore → Replace library**: the library ends up exactly like the backup. Entries that aren't in it leave the library (nothing is deleted), merges get exactly the backup's sources, and read chapters and tracking come from the backup.
+- **Restore → Send tracking to trackers**: after restoring, MyAnimeList, AniList, Anime-Planet and other logged-in trackers are updated to the backup's status, chapters and scores.
+
 ### Improve
 
+- Hiding library titles on sources: author names spelled in another romanization now count as the same person, and a source that lists no author is matched by a distinctive title. Matches made by older, looser rules are checked again.
+
 ### Fix
+
+- Restored merges kept only their scan sources and lost the official one.
+- Entries that were never updated (rebuilt merges, entries moved to another source) are always fetched by a library update, whatever the skip settings.

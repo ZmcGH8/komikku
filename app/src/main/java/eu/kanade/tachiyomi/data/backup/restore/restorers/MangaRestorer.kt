@@ -57,6 +57,10 @@ class MangaRestorer(
     // SY <--
 ) {
     private var now = ZonedDateTime.now()
+
+    // KMK --> Houri+: "Replace library": the backup's read chapters and tracking win over what the app has
+    var replaceLibrary: Boolean = false
+    // KMK <--
     private var currentFetchWindow = fetchInterval.getWindow(now)
 
     /**
@@ -381,7 +385,7 @@ class MangaRestorer(
     }
 
     private fun updateChapterBasedOnSyncState(chapter: Chapter, dbChapter: Chapter): Chapter {
-        return if (isSync) {
+        return if (isSync || /* KMK --> */ replaceLibrary /* KMK <-- */) {
             chapter.copy(
                 id = dbChapter.id,
                 bookmark = chapter.bookmark || dbChapter.bookmark,
@@ -690,6 +694,9 @@ class MangaRestorer(
                     return@mapNotNull null
                 }
 
+                // KMK --> Houri+: a replaced library takes the backup's tracking as it is
+                if (replaceLibrary) return@mapNotNull track.copy(id = dbTrack.id, mangaId = manga.id)
+                // KMK <--
                 // Update to an existing track
                 dbTrack.copy(
                     remoteId = track.remoteId,

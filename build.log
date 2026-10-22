@@ -1,0 +1,1035 @@
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+Downloading https://services.gradle.org/distributions/gradle-9.7.1-bin.zip
+..............10%..............20%...............30%..............40%...............50%..............60%...............70%..............80%..............90%...............100%
+
+Welcome to Gradle 9.7.1!
+
+Here are the highlights of this release:
+ - Isolated Projects graduates to incubating
+ - Broader Configuration Cache compatibility
+ - Resilient Sync helps you fix broken builds
+ - More source locations in problem reports
+
+For more details see https://docs.gradle.org/9.7.1/release-notes.html
+
+Starting a Gradle Daemon (subsequent builds will be faster)
+Type-safe project accessors is an incubating feature.
+
+> Configure project :yakuyomi-engine:engine
+Checking the license for package NDK (Side by side) 28.2.13676358 in /usr/local/lib/android/sdk/licenses
+License for package NDK (Side by side) 28.2.13676358 accepted.
+Preparing "Install NDK (Side by side) 28.2.13676358 v.28.2.13676358".
+"Install NDK (Side by side) 28.2.13676358 v.28.2.13676358" ready.
+Installing NDK (Side by side) 28.2.13676358 in /usr/local/lib/android/sdk/ndk/28.2.13676358
+"Install NDK (Side by side) 28.2.13676358 v.28.2.13676358" complete.
+"Install NDK (Side by side) 28.2.13676358 v.28.2.13676358" finished.
+
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:generateExternalPluginSpecBuilders
+> Task :buildSrc:extractPrecompiledScriptPluginPlugins
+> Task :buildSrc:generateScriptPluginAdapters
+> Task :buildSrc:pluginDescriptors
+> Task :buildSrc:processResources
+> Task :buildSrc:compilePluginsBlocks
+> Task :buildSrc:generatePrecompiledScriptPluginAccessors
+
+> Task :buildSrc:compileKotlin
+w: file:///home/runner/work/komikku/komikku/buildSrc/src/main/kotlin/mihon/buildlogic/ProjectExtensions.kt:37:46 'fun Project.provideDelegate(any: Any?, property: KProperty<*>): PropertyDelegate' is deprecated. Use 'val property = project.property(name)' or 'val property = project.findProperty(name)' instead. See the Gradle 9.6 upgrading guide.
+
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:classes
+> Task :buildSrc:jar
+
+> Configure project :app
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:77:22: 'fun provideDelegate(thisRef: Any?, property: KProperty<*>): ExistingDomainObjectDelegate<ApplicationBuildType>' is deprecated. Use 'val element = getByName(name)' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:77:22: 'fun <T : Any, U : NamedDomainObjectCollection<T>> U.getting(configuration: T.() -> Unit): NamedDomainObjectCollectionDelegateProvider<T>' is deprecated. Use 'val element = getByName(name) { }' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:77:22: 'fun <T> ExistingDomainObjectDelegate<out T>.getValue(receiver: Any?, property: KProperty<*>): T' is deprecated. Use the named() API instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:82:24: 'fun provideDelegate(thisRef: Any?, property: KProperty<*>): ExistingDomainObjectDelegate<ApplicationBuildType>' is deprecated. Use 'val element = getByName(name)' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:82:24: 'fun <T : Any, U : NamedDomainObjectCollection<T>> U.getting(configuration: T.() -> Unit): NamedDomainObjectCollectionDelegateProvider<T>' is deprecated. Use 'val element = getByName(name) { }' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:82:24: 'fun <T> ExistingDomainObjectDelegate<out T>.getValue(receiver: Any?, property: KProperty<*>): T' is deprecated. Use the named() API instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:150:34: 'fun srcDirs(vararg srcDirs: Any): Any' is deprecated. Use `directories` mutable set instead.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:151:36: 'fun srcDirs(vararg srcDirs: Any): Any' is deprecated. Use `directories` mutable set instead.
+w: file:///home/runner/work/komikku/komikku/app/build.gradle.kts:232:9: 'var renderScript: Boolean?' is deprecated. This property and renderScript support will be removed in AGP 10.0.
+
+> Configure project :i18n
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :i18n-kmk
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :i18n-sy
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :source-api
+w: file:///home/runner/work/komikku/komikku/source-api/build.gradle.kts:37:27: 'fun provideDelegate(thisRef: Any?, property: KProperty<*>): ExistingDomainObjectDelegate<KotlinSourceSet>' is deprecated. Use 'val element = getByName(name)' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-api/build.gradle.kts:37:27: 'fun <T : Any, U : NamedDomainObjectCollection<T>> U.getting(configuration: T.() -> Unit): NamedDomainObjectCollectionDelegateProvider<T>' is deprecated. Use 'val element = getByName(name) { }' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-api/build.gradle.kts:37:27: 'fun <T> ExistingDomainObjectDelegate<out T>.getValue(receiver: Any?, property: KProperty<*>): T' is deprecated. Use the named() API instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-api/build.gradle.kts:54:28: 'fun provideDelegate(thisRef: Any?, property: KProperty<*>): ExistingDomainObjectDelegate<KotlinSourceSet>' is deprecated. Use 'val element = getByName(name)' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-api/build.gradle.kts:54:28: 'fun <T : Any, U : NamedDomainObjectCollection<T>> U.getting(configuration: T.() -> Unit): NamedDomainObjectCollectionDelegateProvider<T>' is deprecated. Use 'val element = getByName(name) { }' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-api/build.gradle.kts:54:28: 'fun <T> ExistingDomainObjectDelegate<out T>.getValue(receiver: Any?, property: KProperty<*>): T' is deprecated. Use the named() API instead. See the Gradle 9.6 upgrading guide.
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :source-local
+w: file:///home/runner/work/komikku/komikku/source-local/build.gradle.kts:20:27: 'fun provideDelegate(thisRef: Any?, property: KProperty<*>): ExistingDomainObjectDelegate<KotlinSourceSet>' is deprecated. Use 'val element = getByName(name)' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-local/build.gradle.kts:20:27: 'fun <T : Any, U : NamedDomainObjectCollection<T>> U.getting(configuration: T.() -> Unit): NamedDomainObjectCollectionDelegateProvider<T>' is deprecated. Use 'val element = getByName(name) { }' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-local/build.gradle.kts:20:27: 'fun <T> ExistingDomainObjectDelegate<out T>.getValue(receiver: Any?, property: KProperty<*>): T' is deprecated. Use the named() API instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-local/build.gradle.kts:31:28: 'fun provideDelegate(thisRef: Any?, property: KProperty<*>): ExistingDomainObjectDelegate<KotlinSourceSet>' is deprecated. Use 'val element = getByName(name)' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-local/build.gradle.kts:31:28: 'fun <T : Any, U : NamedDomainObjectCollection<T>> U.getting(configuration: T.() -> Unit): NamedDomainObjectCollectionDelegateProvider<T>' is deprecated. Use 'val element = getByName(name) { }' instead. See the Gradle 9.6 upgrading guide.
+w: file:///home/runner/work/komikku/komikku/source-local/build.gradle.kts:31:28: 'fun <T> ExistingDomainObjectDelegate<out T>.getValue(receiver: Any?, property: KProperty<*>): T' is deprecated. Use the named() API instead. See the Gradle 9.6 upgrading guide.
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :telemetry
+w: file:///home/runner/work/komikku/komikku/telemetry/build.gradle.kts:13:24: 'fun srcDirs(vararg srcDirs: Any): Any' is deprecated. Use `directories` mutable set instead.
+w: file:///home/runner/work/komikku/komikku/telemetry/build.gradle.kts:15:24: 'fun srcDirs(vararg srcDirs: Any): Any' is deprecated. Use `directories` mutable set instead.
+
+> Task :imagedecoder-houri:imagedecoder:preBuild UP-TO-DATE
+> Task :webgpuviewer-houri:webgpuviewer:preBuild UP-TO-DATE
+> Task :webgpuviewer-houri:webgpuviewer:preReleaseBuild UP-TO-DATE
+> Task :yakuyomi-engine:engine:preBuild UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :core-metadata:preBuild UP-TO-DATE
+> Task :app:preMtlPreviewBuild UP-TO-DATE
+> Task :core-metadata:preReleaseBuild UP-TO-DATE
+> Task :yakuyomi-engine:engine:preReleaseBuild UP-TO-DATE
+> Task :webgpuviewer-houri:webgpuviewer:generateReleaseResources
+> Task :yakuyomi-engine:engine:generateReleaseResources
+> Task :core-metadata:generateReleaseResources
+> Task :yakuyomi-engine:engine:packageReleaseResources
+> Task :core-metadata:packageReleaseResources
+> Task :data:preBuild UP-TO-DATE
+> Task :data:preReleaseBuild UP-TO-DATE
+> Task :yakuyomi-engine:engine:processReleaseNavigationResources
+> Task :data:generateReleaseResources FROM-CACHE
+> Task :webgpuviewer-houri:webgpuviewer:packageReleaseResources
+> Task :webgpuviewer-houri:webgpuviewer:processReleaseNavigationResources
+> Task :data:packageReleaseResources
+> Task :domain:preBuild UP-TO-DATE
+> Task :domain:preReleaseBuild UP-TO-DATE
+> Task :domain:generateReleaseResources FROM-CACHE
+> Task :domain:packageReleaseResources
+> Task :flagkit:preBuild UP-TO-DATE
+> Task :flagkit:preReleaseBuild UP-TO-DATE
+> Task :flagkit:generateReleaseResources
+> Task :flagkit:packageReleaseResources
+> Task :i18n-kmk:generateMRcommonMain
+> Task :i18n-sy:generateMRcommonMain
+> Task :i18n:generateMRcommonMain
+> Task :i18n-kmk:generateMRandroidMain
+> Task :i18n-kmk:androidPreBuild UP-TO-DATE
+> Task :i18n-kmk:preAndroidMainBuild UP-TO-DATE
+> Task :i18n-sy:generateMRandroidMain
+> Task :i18n-sy:androidPreBuild UP-TO-DATE
+> Task :i18n-sy:preAndroidMainBuild UP-TO-DATE
+> Task :i18n-kmk:packageAndroidMainResources
+> Task :llamatik-native:preBuild UP-TO-DATE
+> Task :llamatik-native:preReleaseBuild UP-TO-DATE
+> Task :llamatik-native:generateReleaseResources FROM-CACHE
+> Task :llamatik-native:packageReleaseResources
+> Task :presentation-core:preBuild UP-TO-DATE
+> Task :presentation-core:preReleaseBuild UP-TO-DATE
+> Task :presentation-core:generateReleaseResources
+> Task :presentation-core:packageReleaseResources
+> Task :presentation-widget:preBuild UP-TO-DATE
+> Task :presentation-widget:preReleaseBuild UP-TO-DATE
+> Task :presentation-widget:generateReleaseResources
+> Task :presentation-widget:packageReleaseResources
+> Task :source-api:androidPreBuild UP-TO-DATE
+> Task :source-api:preAndroidMainBuild UP-TO-DATE
+> Task :source-api:generateAndroidMainEmptyResourceFiles
+> Task :source-local:androidPreBuild UP-TO-DATE
+> Task :source-local:preAndroidMainBuild UP-TO-DATE
+> Task :source-local:generateAndroidMainEmptyResourceFiles
+> Task :telemetry:preBuild UP-TO-DATE
+> Task :telemetry:preReleaseBuild UP-TO-DATE
+> Task :telemetry:generateReleaseResources FROM-CACHE
+> Task :telemetry:packageReleaseResources
+> Task :yakuyomi:preBuild UP-TO-DATE
+> Task :yakuyomi:preReleaseBuild UP-TO-DATE
+> Task :yakuyomi:generateReleaseResources FROM-CACHE
+> Task :yakuyomi:packageReleaseResources
+> Task :core:archive:preBuild UP-TO-DATE
+> Task :core:archive:preReleaseBuild UP-TO-DATE
+> Task :core:archive:generateReleaseResources FROM-CACHE
+> Task :core:archive:packageReleaseResources
+> Task :core:common:preBuild UP-TO-DATE
+> Task :core:common:preReleaseBuild UP-TO-DATE
+> Task :core:common:generateReleaseResources FROM-CACHE
+> Task :core:common:packageReleaseResources
+> Task :core:concurrency:preBuild UP-TO-DATE
+> Task :core:concurrency:preReleaseBuild UP-TO-DATE
+> Task :core:concurrency:generateReleaseResources FROM-CACHE
+> Task :core:concurrency:packageReleaseResources
+> Task :core:metro:preBuild UP-TO-DATE
+> Task :core:metro:preReleaseBuild UP-TO-DATE
+> Task :core:metro:generateReleaseResources FROM-CACHE
+> Task :core:metro:packageReleaseResources
+> Task :core-metadata:processReleaseNavigationResources
+> Task :data:processReleaseNavigationResources FROM-CACHE
+> Task :domain:processReleaseNavigationResources FROM-CACHE
+> Task :flagkit:processReleaseNavigationResources
+> Task :i18n-kmk:generateAndroidMainEmptyResourceFiles
+> Task :llamatik-native:processReleaseNavigationResources FROM-CACHE
+> Task :presentation-core:processReleaseNavigationResources
+> Task :presentation-widget:processReleaseNavigationResources
+> Task :telemetry:processReleaseNavigationResources FROM-CACHE
+> Task :yakuyomi:processReleaseNavigationResources FROM-CACHE
+> Task :core:archive:processReleaseNavigationResources FROM-CACHE
+> Task :core:common:processReleaseNavigationResources FROM-CACHE
+> Task :core:concurrency:processReleaseNavigationResources FROM-CACHE
+> Task :core:metro:processReleaseNavigationResources FROM-CACHE
+> Task :webgpuviewer-houri:webgpuviewer:parseReleaseLocalResources
+> Task :i18n-sy:packageAndroidMainResources
+> Task :i18n-sy:generateAndroidMainEmptyResourceFiles
+> Task :core-metadata:parseReleaseLocalResources
+> Task :webgpuviewer-houri:webgpuviewer:generateReleaseRFile
+> Task :data:parseReleaseLocalResources FROM-CACHE
+> Task :domain:parseReleaseLocalResources FROM-CACHE
+> Task :i18n-sy:parseAndroidMainLocalResources
+> Task :yakuyomi-engine:engine:parseReleaseLocalResources
+> Task :i18n-kmk:parseAndroidMainLocalResources
+> Task :i18n:generateMRandroidMain
+> Task :i18n:androidPreBuild UP-TO-DATE
+> Task :i18n:preAndroidMainBuild UP-TO-DATE
+> Task :yakuyomi-engine:engine:generateReleaseRFile
+> Task :i18n-kmk:generateAndroidMainRFile
+> Task :core:common:parseReleaseLocalResources FROM-CACHE
+> Task :core:concurrency:parseReleaseLocalResources FROM-CACHE
+> Task :i18n:packageAndroidMainResources
+> Task :i18n:generateAndroidMainEmptyResourceFiles
+> Task :imagedecoder-houri:imagedecoder:preReleaseBuild UP-TO-DATE
+> Task :i18n:parseAndroidMainLocalResources
+> Task :imagedecoder-houri:imagedecoder:generateReleaseResources
+> Task :imagedecoder-houri:imagedecoder:packageReleaseResources
+> Task :imagedecoder-houri:imagedecoder:processReleaseNavigationResources
+> Task :i18n-sy:generateAndroidMainRFile
+> Task :core:metro:parseReleaseLocalResources FROM-CACHE
+> Task :imagedecoder-houri:imagedecoder:parseReleaseLocalResources
+> Task :core:concurrency:generateReleaseRFile
+> Task :core:metro:generateReleaseRFile
+> Task :flagkit:parseReleaseLocalResources
+> Task :i18n:generateAndroidMainRFile
+> Task :core-metadata:generateReleaseRFile
+> Task :presentation-core:parseReleaseLocalResources
+> Task :telemetry:parseReleaseLocalResources FROM-CACHE
+> Task :core:common:generateReleaseRFile
+> Task :domain:generateReleaseRFile
+> Task :imagedecoder-houri:imagedecoder:generateReleaseRFile
+> Task :telemetry:generateReleaseRFile
+> Task :data:generateReleaseRFile
+> Task :app:compileMtlPreviewAidl
+> Task :presentation-widget:parseReleaseLocalResources
+> Task :llamatik-native:parseReleaseLocalResources FROM-CACHE
+> Task :llamatik-native:generateReleaseRFile
+> Task :yakuyomi:parseReleaseLocalResources FROM-CACHE
+> Task :presentation-core:generateReleaseRFile
+> Task :flagkit:generateReleaseRFile
+> Task :core:archive:parseReleaseLocalResources FROM-CACHE
+> Task :core:archive:generateReleaseRFile
+> Task :app:generateMtlPreviewResValues
+> Task :app:generateMtlPreviewResources
+> Task :app:dataBindingMergeDependencyArtifactsMtlPreview
+> Task :i18n:kmpPartiallyResolvedDependenciesChecker
+> Task :i18n:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :presentation-widget:generateReleaseRFile
+> Task :i18n-sy:kmpPartiallyResolvedDependenciesChecker
+> Task :i18n-sy:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :yakuyomi:generateReleaseRFile
+> Task :source-api:kmpPartiallyResolvedDependenciesChecker
+> Task :source-api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :i18n-kmk:kmpPartiallyResolvedDependenciesChecker
+> Task :i18n-kmk:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:prepareLibraryDefinitionsMtlPreview
+> Task :webgpuviewer-houri:webgpuviewer:compileReleaseKotlin
+> Task :imagedecoder-houri:imagedecoder:compileReleaseKotlin
+> Task :yakuyomi-engine:engine:compileReleaseKotlin
+> Task :imagedecoder-houri:imagedecoder:javaPreCompileRelease
+> Task :imagedecoder-houri:imagedecoder:compileReleaseJavaWithJavac NO-SOURCE
+> Task :i18n-kmk:compileAndroidMain
+> Task :app:generateMtlPreviewBuildConfig
+> Task :i18n:compileAndroidMain
+> Task :app:packageMtlPreviewResources
+
+> Task :app:mergeMtlPreviewResources
+/home/runner/work/komikku/komikku/i18n-kmk/build/intermediates/packaged_res/androidMain/packageAndroidMainResources/res/values/values.xml:581:4: Multiple substitutions specified in non-positional format of string resource string/pref_webgpu_page_offset_summary. Did you mean to add the formatted="false" attribute?
+
+> Task :app:processMtlPreviewNavigationResources
+> Task :i18n-sy:compileAndroidMain
+
+> Task :yakuyomi-engine:engine:compileReleaseKotlin
+w: file:///home/runner/work/komikku/komikku/external/yakuyomi-engine/engine/src/main/kotlin/li/joye/yakuyomi/engine/Ocr.kt:417:48 No cast needed.
+
+> Task :imagedecoder-houri:imagedecoder:bundleLibCompileToJarRelease
+> Task :yakuyomi-engine:engine:javaPreCompileRelease
+> Task :yakuyomi-engine:engine:compileReleaseJavaWithJavac NO-SOURCE
+> Task :i18n:bundleAndroidMainClassesToCompileJar
+> Task :i18n-sy:bundleAndroidMainClassesToCompileJar
+> Task :app:parseMtlPreviewLocalResources
+> Task :i18n-kmk:bundleAndroidMainClassesToCompileJar
+> Task :yakuyomi-engine:engine:bundleLibCompileToJarRelease
+> Task :app:generateMtlPreviewRFile
+> Task :core:concurrency:compileReleaseKotlin
+> Task :core:concurrency:javaPreCompileRelease
+> Task :core:metro:javaPreCompileRelease
+> Task :core:concurrency:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core:common:javaPreCompileRelease FROM-CACHE
+> Task :core-metadata:javaPreCompileRelease FROM-CACHE
+> Task :core:metro:compileReleaseKotlin
+> Task :core:metro:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core:concurrency:bundleLibCompileToJarRelease
+> Task :domain:javaPreCompileRelease FROM-CACHE
+> Task :flagkit:javaPreCompileRelease FROM-CACHE
+> Task :presentation-core:javaPreCompileRelease FROM-CACHE
+> Task :presentation-widget:javaPreCompileRelease FROM-CACHE
+> Task :source-local:kmpPartiallyResolvedDependenciesChecker
+> Task :source-local:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:archive:javaPreCompileRelease FROM-CACHE
+> Task :core:metro:bundleLibCompileToJarRelease
+> Task :telemetry:compileReleaseKotlin
+> Task :telemetry:javaPreCompileRelease FROM-CACHE
+> Task :telemetry:compileReleaseJavaWithJavac NO-SOURCE
+> Task :app:dataBindingGenBaseClassesMtlPreview
+> Task :data:javaPreCompileRelease FROM-CACHE
+> Task :llamatik-native:generateReleaseBuildConfig
+> Task :telemetry:bundleLibCompileToJarRelease
+> Task :llamatik-native:javaPreCompileRelease FROM-CACHE
+> Task :yakuyomi:javaPreCompileRelease FROM-CACHE
+> Task :webgpuviewer-houri:webgpuviewer:javaPreCompileRelease
+> Task :llamatik-native:compileReleaseKotlin
+
+> Task :llamatik-native:compileReleaseJavaWithJavac
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+
+
+> Task :data:generateReleaseDatabaseInterface
+> Task :llamatik-native:bundleLibCompileToJarRelease
+> Task :core:common:compileReleaseKotlin
+> Task :core:common:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core:common:bundleLibCompileToJarRelease
+> Task :flagkit:compileReleaseKotlin NO-SOURCE
+> Task :flagkit:compileReleaseJavaWithJavac NO-SOURCE
+> Task :flagkit:bundleLibCompileToJarRelease
+
+> Task :webgpuviewer-houri:webgpuviewer:compileReleaseKotlin
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:132:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:133:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:134:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:135:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:136:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:137:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:138:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:139:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:140:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:141:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Circle.kt:146:48 Java type mismatch: inferred type is 'ByteBuffer?', but 'ByteBuffer' was expected.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Draw.kt:23:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'MutableList<GPUBuffer>?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Draw.kt:27:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'MutableList<GPUBuffer>?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Draw.kt:33:13 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'MutableList<GPUBuffer>?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:171:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:172:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:173:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:174:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:175:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:176:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:177:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:178:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:179:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:180:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Rect.kt:185:48 Java type mismatch: inferred type is 'ByteBuffer?', but 'ByteBuffer' was expected.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Text.kt:1044:9 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Text.kt:1049:5 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/draw/Text.kt:1050:12 Java type mismatch: inferred type is 'ByteBuffer?', but 'ByteBuffer' was expected.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/extensions.kt:90:46 'val defaultDisplay: Display!' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/Hdr.kt:165:20 Unnecessary safe call on a non-null receiver of type 'Display'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:647:9 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:648:22 Java type mismatch: inferred type is 'ByteBuffer?', but 'ByteBuffer' was expected.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:649:9 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:650:9 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:652:51 Java type mismatch: inferred type is 'ByteBuffer?', but 'ByteBuffer' was expected.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:679:9 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:680:22 Java type mismatch: inferred type is 'ByteBuffer?', but 'ByteBuffer' was expected.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:681:9 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'ByteBuffer?'.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/renderer/RenderPage.kt:683:51 Java type mismatch: inferred type is 'ByteBuffer?', but 'ByteBuffer' was expected.
+w: file:///home/runner/work/komikku/komikku/external/webgpuviewer-houri/library/src/main/java/ca/mpreg/webgpuviewer/viewer/ImageViewerContinuousState.kt:241:64 Redundant call of conversion method.
+
+> Task :webgpuviewer-houri:webgpuviewer:compileReleaseJavaWithJavac NO-SOURCE
+> Task :webgpuviewer-houri:webgpuviewer:bundleLibCompileToJarRelease
+> Task :source-api:compileAndroidMain
+> Task :source-api:bundleAndroidMainClassesToCompileJar
+> Task :core-metadata:compileReleaseKotlin
+> Task :core-metadata:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core-metadata:bundleLibCompileToJarRelease
+
+> Task :presentation-core:compileReleaseKotlin
+w: file:///home/runner/work/komikku/komikku/presentation-core/src/main/java/tachiyomi/presentation/core/components/AdaptiveSheet.kt:111:13 'fun <T> AnchoredDraggableState(initialValue: T, positionalThreshold: (Float) -> Float, velocityThreshold: () -> Float, snapAnimationSpec: AnimationSpec<Float>, decayAnimationSpec: DecayAnimationSpec<Float>, confirmValueChange: (T) -> Boolean = ...): AnchoredDraggableState<T>' is deprecated. This constructor of AnchoredDraggableState has been deprecated. Please pass thresholds and animation specs to AnchoredDraggableDefaults.flingBehavior(..) instead, which can be passed to Modifier.anchoredDraggable.
+
+> Task :presentation-core:compileReleaseJavaWithJavac NO-SOURCE
+> Task :presentation-core:bundleLibCompileToJarRelease
+
+> Task :yakuyomi:compileReleaseKotlin
+w: file:///home/runner/work/komikku/komikku/yakuyomi-engine/src/main/kotlin/exh/yakuyomi/OrtUpscaleSession.kt:102:51 No cast needed.
+
+> Task :yakuyomi:compileReleaseJavaWithJavac NO-SOURCE
+> Task :yakuyomi:bundleLibCompileToJarRelease
+> Task :core:archive:compileReleaseKotlin
+> Task :core:archive:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core:archive:bundleLibCompileToJarRelease
+> Task :domain:compileReleaseKotlin
+> Task :domain:compileReleaseJavaWithJavac NO-SOURCE
+> Task :domain:bundleLibCompileToJarRelease
+> Task :source-local:compileAndroidMain
+> Task :source-local:bundleAndroidMainClassesToCompileJar
+> Task :presentation-widget:compileReleaseKotlin
+> Task :presentation-widget:compileReleaseJavaWithJavac NO-SOURCE
+> Task :presentation-widget:bundleLibCompileToJarRelease
+
+> Task :data:compileReleaseKotlin
+w: file:///home/runner/work/komikku/komikku/data/src/main/java/tachiyomi/data/history/HistoryRepositoryImpl.kt:46:67 This declaration needs opt-in. Its usage should be marked with '@kotlinx.coroutines.ExperimentalCoroutinesApi' or '@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)'
+w: file:///home/runner/work/komikku/komikku/data/src/main/java/tachiyomi/data/manga/CustomMangaRepositoryImpl.kt:188:13 Redundant creation of Json format. Creating instances for each usage can be slow.
+w: file:///home/runner/work/komikku/komikku/data/src/main/java/tachiyomi/data/manga/MangaRepositoryImpl.kt:96:67 This declaration needs opt-in. Its usage should be marked with '@kotlinx.coroutines.ExperimentalCoroutinesApi' or '@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)'
+
+> Task :data:compileReleaseJavaWithJavac NO-SOURCE
+> Task :data:bundleLibCompileToJarRelease
+> Task :app:compileMtlPreviewKotlin
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/category/components/CategoryListItem.kt:214:62 'val Icons.Outlined.ChromeReaderMode: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.ChromeReaderMode.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/category/components/CategoryListItem.kt:297:53 'val Icons.Outlined.ChromeReaderMode: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.ChromeReaderMode.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/manga/components/CoverCropDialog.kt:409:43 'val Icons.Outlined.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.ArrowBack.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/manga/components/CoverCropDialog.kt:416:43 'val Icons.Outlined.ArrowForward: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.ArrowForward.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/manga/components/MangaInfoHeader.kt:371:39 'val Icons.Outlined.MenuBook: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.MenuBook.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/more/settings/screen/SettingsMainScreen.kt:233:35 'val Icons.Outlined.MenuBook: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.MenuBook.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/reader/MtlTranslationOverlay.kt:109:42 Unnecessary safe call on a non-null receiver of type 'TranslationStatus.ChapterStatus'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/reader/MtlTranslationOverlay.kt:220:24 Condition is always 'true'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderBottomBar.kt:203:50 'val Icons.Outlined.List: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.List.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/presentation/theme/colorscheme/WallpaperSeedSampler.kt:131:46 'static field ACTION_WALLPAPER_CHANGED: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryScreenModel.kt:763:45 Elvis operator (?:) always returns the left operand of non-nullable type 'Long'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt:596:73 Unnecessary non-null assertion (!!) on a non-null receiver of type 'TextSearchSource'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt:596:100 Unnecessary non-null assertion (!!) on a non-null receiver of type 'SChapter'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt:609:39 Unnecessary non-null assertion (!!) on a non-null receiver of type 'NovelWebViewer'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt:833:35 Unnecessary non-null assertion (!!) on a non-null receiver of type 'TextTocSource'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt:834:40 Unnecessary non-null assertion (!!) on a non-null receiver of type 'SChapter'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt:844:43 Unnecessary non-null assertion (!!) on a non-null receiver of type 'List<ReaderPage>'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt:859:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'NovelWebViewer'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/novel/NovelWebViewer.kt:490:9 'var allowUniversalAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webgpu/WebGpuViewer.kt:438:22 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/WebtoonPageHolder.kt:206:38 Unnecessary safe call on a non-null receiver of type 'ReaderChapter'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/exh/yakuyomi/TranslationWork.kt:129:48 Unnecessary safe call on a non-null receiver of type 'TranslationStatus.PageStatus'.
+w: file:///home/runner/work/komikku/komikku/app/src/main/java/exh/yakuyomi/TranslationWork.kt:133:60 Unnecessary safe call on a non-null receiver of type 'TranslationStatus.PageStatus'.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run-1792664518656.json
+
+[Incubating] Problems report is available at: file:///home/runner/work/komikku/komikku/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 7m 25s
+187 actionable tasks: 149 executed, 38 from cache
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html
+Type-safe project accessors is an incubating feature.
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:generateExternalPluginSpecBuilders UP-TO-DATE
+> Task :buildSrc:extractPrecompiledScriptPluginPlugins UP-TO-DATE
+> Task :buildSrc:compilePluginsBlocks UP-TO-DATE
+> Task :buildSrc:generatePrecompiledScriptPluginAccessors UP-TO-DATE
+> Task :buildSrc:generateScriptPluginAdapters UP-TO-DATE
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :i18n
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :i18n-kmk
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :i18n-sy
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :source-api
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Configure project :source-local
+w: ⚠️ Unused Kotlin Source Sets
+The Kotlin source set commonTest was configured but not added to any Kotlin compilation.
+Solution: You can add a source set to a target's compilation by connecting it with the compilation's default source set using 'dependsOn'.
+See https://kotl.in/connecting-source-sets
+
+
+> Task :i18n-sy:androidPreBuild UP-TO-DATE
+> Task :i18n-sy:preAndroidMainBuild UP-TO-DATE
+> Task :domain:preBuild UP-TO-DATE
+> Task :domain:preDebugBuild UP-TO-DATE
+> Task :i18n:androidPreBuild UP-TO-DATE
+> Task :i18n:preAndroidMainBuild UP-TO-DATE
+> Task :i18n-kmk:androidPreBuild UP-TO-DATE
+> Task :i18n-kmk:preAndroidMainBuild UP-TO-DATE
+> Task :i18n-sy:generateAndroidMainEmptyResourceFiles UP-TO-DATE
+> Task :i18n:generateAndroidMainEmptyResourceFiles UP-TO-DATE
+> Task :i18n-sy:generateMRcommonMain UP-TO-DATE
+> Task :i18n:generateMRcommonMain UP-TO-DATE
+> Task :i18n-kmk:generateAndroidMainEmptyResourceFiles UP-TO-DATE
+> Task :i18n-sy:generateMRandroidMain UP-TO-DATE
+> Task :i18n:generateMRandroidMain UP-TO-DATE
+> Task :i18n-kmk:generateMRcommonMain UP-TO-DATE
+> Task :i18n:packageAndroidMainResources UP-TO-DATE
+> Task :i18n-kmk:generateMRandroidMain UP-TO-DATE
+> Task :i18n:parseAndroidMainLocalResources UP-TO-DATE
+> Task :i18n-sy:packageAndroidMainResources UP-TO-DATE
+> Task :i18n:generateAndroidMainRFile UP-TO-DATE
+> Task :i18n-sy:parseAndroidMainLocalResources UP-TO-DATE
+> Task :domain:generateDebugResources FROM-CACHE
+> Task :core:common:preBuild UP-TO-DATE
+> Task :i18n-kmk:packageAndroidMainResources UP-TO-DATE
+> Task :core:common:preDebugBuild UP-TO-DATE
+> Task :i18n-kmk:parseAndroidMainLocalResources UP-TO-DATE
+> Task :i18n-sy:generateAndroidMainRFile UP-TO-DATE
+> Task :core:common:generateDebugResources FROM-CACHE
+> Task :i18n-kmk:generateAndroidMainRFile UP-TO-DATE
+> Task :core:metro:preBuild UP-TO-DATE
+> Task :core:metro:preDebugBuild UP-TO-DATE
+> Task :core:concurrency:preBuild UP-TO-DATE
+> Task :core:concurrency:preDebugBuild UP-TO-DATE
+> Task :core:metro:generateDebugResources FROM-CACHE
+> Task :core:concurrency:generateDebugResources FROM-CACHE
+> Task :domain:packageDebugResources
+> Task :core:common:packageDebugResources
+> Task :domain:processDebugNavigationResources FROM-CACHE
+> Task :core:common:processDebugNavigationResources FROM-CACHE
+> Task :core:concurrency:processDebugNavigationResources FROM-CACHE
+> Task :domain:parseDebugLocalResources FROM-CACHE
+> Task :i18n:kmpPartiallyResolvedDependenciesChecker
+> Task :i18n:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:common:parseDebugLocalResources FROM-CACHE
+> Task :i18n-sy:kmpPartiallyResolvedDependenciesChecker
+> Task :i18n-sy:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:concurrency:packageDebugResources
+> Task :core:metro:packageDebugResources
+> Task :core:metro:processDebugNavigationResources FROM-CACHE
+> Task :core:concurrency:parseDebugLocalResources FROM-CACHE
+> Task :i18n:compileAndroidMain UP-TO-DATE
+> Task :i18n:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :i18n-sy:compileAndroidMain UP-TO-DATE
+> Task :i18n-sy:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :core:metro:parseDebugLocalResources FROM-CACHE
+> Task :source-api:kmpPartiallyResolvedDependenciesChecker
+> Task :source-api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:common:preReleaseBuild UP-TO-DATE
+> Task :core:common:generateReleaseResources UP-TO-DATE
+> Task :i18n-kmk:kmpPartiallyResolvedDependenciesChecker
+> Task :i18n-kmk:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:common:packageReleaseResources UP-TO-DATE
+> Task :core:metro:generateDebugRFile FROM-CACHE
+> Task :core:metro:preReleaseBuild UP-TO-DATE
+> Task :core:concurrency:generateDebugRFile FROM-CACHE
+> Task :core:concurrency:preReleaseBuild UP-TO-DATE
+> Task :core:metro:generateReleaseResources UP-TO-DATE
+> Task :core:concurrency:generateReleaseResources UP-TO-DATE
+> Task :core:common:processReleaseNavigationResources UP-TO-DATE
+> Task :core:metro:packageReleaseResources UP-TO-DATE
+> Task :core:concurrency:packageReleaseResources UP-TO-DATE
+> Task :core:metro:processReleaseNavigationResources UP-TO-DATE
+> Task :core:metro:parseReleaseLocalResources UP-TO-DATE
+> Task :core:concurrency:processReleaseNavigationResources UP-TO-DATE
+> Task :core:concurrency:parseReleaseLocalResources UP-TO-DATE
+> Task :i18n-kmk:compileAndroidMain UP-TO-DATE
+> Task :i18n-kmk:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :source-api:androidPreBuild UP-TO-DATE
+> Task :source-api:preAndroidMainBuild UP-TO-DATE
+> Task :core:metro:generateReleaseRFile UP-TO-DATE
+> Task :core:concurrency:generateReleaseRFile UP-TO-DATE
+> Task :domain:javaPreCompileDebug FROM-CACHE
+> Task :domain:preDebugUnitTestBuild UP-TO-DATE
+> Task :domain:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :core:metro:compileReleaseKotlin UP-TO-DATE
+> Task :core:concurrency:compileReleaseKotlin UP-TO-DATE
+> Task :core:metro:javaPreCompileRelease UP-TO-DATE
+> Task :core:concurrency:javaPreCompileRelease UP-TO-DATE
+> Task :core:concurrency:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core:concurrency:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :core:metro:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core:metro:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :i18n:bundleAndroidMainClassesToRuntimeJar
+> Task :i18n:processAndroidMainJavaRes
+> Task :i18n-kmk:bundleAndroidMainClassesToRuntimeJar
+> Task :core:concurrency:javaPreCompileDebug FROM-CACHE
+> Task :core:metro:javaPreCompileDebug FROM-CACHE
+> Task :i18n-kmk:processAndroidMainJavaRes
+> Task :i18n-sy:bundleAndroidMainClassesToRuntimeJar
+> Task :i18n-sy:processAndroidMainJavaRes
+> Task :core:common:generateDebugRFile FROM-CACHE
+> Task :core:common:parseReleaseLocalResources UP-TO-DATE
+> Task :core:common:generateReleaseRFile UP-TO-DATE
+> Task :domain:generateDebugRFile FROM-CACHE
+> Task :core:common:compileReleaseKotlin UP-TO-DATE
+> Task :core:common:javaPreCompileRelease UP-TO-DATE
+> Task :core:common:compileReleaseJavaWithJavac NO-SOURCE
+> Task :core:common:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :source-api:compileAndroidMain UP-TO-DATE
+> Task :source-api:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :core:common:javaPreCompileDebug FROM-CACHE
+> Task :source-api:bundleAndroidMainClassesToRuntimeJar
+> Task :source-api:processAndroidMainJavaRes
+> Task :domain:generateDebugUnitTestStubRFile
+> Task :core:concurrency:compileDebugKotlin
+> Task :core:concurrency:compileDebugJavaWithJavac NO-SOURCE
+> Task :core:concurrency:bundleLibCompileToJarDebug
+> Task :core:concurrency:bundleLibRuntimeToJarDebug
+> Task :core:concurrency:processDebugJavaRes
+> Task :core:metro:compileDebugKotlin
+> Task :core:metro:compileDebugJavaWithJavac NO-SOURCE
+> Task :core:metro:bundleLibCompileToJarDebug
+> Task :core:metro:bundleLibRuntimeToJarDebug
+> Task :core:metro:processDebugJavaRes
+> Task :core:common:compileDebugKotlin
+> Task :core:common:compileDebugJavaWithJavac NO-SOURCE
+> Task :core:common:bundleLibRuntimeToJarDebug
+> Task :core:common:bundleLibCompileToJarDebug
+> Task :core:common:processDebugJavaRes
+> Task :domain:compileDebugKotlin
+> Task :domain:compileDebugJavaWithJavac NO-SOURCE
+> Task :domain:processDebugJavaRes
+> Task :domain:bundleLibRuntimeToJarDebug
+> Task :domain:bundleLibCompileToJarDebug
+> Task :domain:compileDebugUnitTestKotlin
+> Task :domain:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :domain:processDebugUnitTestJavaRes
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :domain:testDebugUnitTest
+
+DeleteCategoryTest > deletes child subcategories along with the parent() PASSED
+
+DeleteCategoryTest > tolerates a single failed delete and still removes the rest() PASSED
+
+DeleteCategoryTest > deletes only the parent when it has no subcategories() PASSED
+
+DeleteOrphanedSubcategoriesTest > returns internal error when repository fails() PASSED
+
+DeleteOrphanedSubcategoriesTest > delegates orphan deletion to repository() PASSED
+
+GetCategoryUpdateIntervalTest > the shortest interval wins across categories() PASSED
+
+GetCategoryUpdateIntervalTest > an empty interval map leaves the schedule alone() PASSED
+
+GetCategoryUpdateIntervalTest > the bound interval applies() PASSED
+
+GetCategoryUpdateIntervalTest > a category the entry is not in is ignored() PASSED
+
+GetCategoryUpdateIntervalTest > a category without an interval leaves the schedule alone() PASSED
+
+GetCategoryUpdateIntervalTest > no categories means nothing narrows the schedule() PASSED
+
+GetCategoryUpdateIntervalTest > unrelated categories do not contribute their interval() PASSED
+
+MergeCategoriesTest > reassigns manga reparents children deletes sources and compacts order() PASSED
+
+MergeCategoriesTest > rejects invalid target and sources() PASSED
+
+SyncCategoriesWithTrackStatusTest > await does not write when no category is bound to any status() PASSED
+
+SyncCategoriesWithTrackStatusTest > a parent cycle does not hang() PASSED
+
+SyncCategoriesWithTrackStatusTest > nothing bound means nothing to do() PASSED
+
+SyncCategoriesWithTrackStatusTest > await does not write when the status did not change the membership() PASSED
+
+SyncCategoriesWithTrackStatusTest > await writes the membership when the status moved it() PASSED
+
+SyncCategoriesWithTrackStatusTest > an uncategorised entry reaches no subcategory at all() PASSED
+
+SyncCategoriesWithTrackStatusTest > an unbound category is never touched() PASSED
+
+SyncCategoriesWithTrackStatusTest > an entry already in the right category is left exactly as it was() PASSED
+
+SyncCategoriesWithTrackStatusTest > losing tracking clears the entry out of every bound category() PASSED
+
+SyncCategoriesWithTrackStatusTest > a category bound to the current status gains the entry() PASSED
+
+SyncCategoriesWithTrackStatusTest > a category bound to a different status loses the entry() PASSED
+
+SyncCategoriesWithTrackStatusTest > both branches are updated when the entry is in both() PASSED
+
+SyncCategoriesWithTrackStatusTest > the entry is moved between subcategories of its own branch() PASSED
+
+SyncCategoriesWithTrackStatusTest > a top-level binding is not scoped() PASSED
+
+SyncCategoriesWithTrackStatusTest > a subcategory in another branch is not added() PASSED
+
+SyncCategoriesWithTrackStatusTest > two categories bound to the same status both gain the entry() PASSED
+
+SyncCategoriesWithTrackStatusTest > an unbound category is never added to either() PASSED
+
+SyncCategoriesWithTrackStatusTest > a three-deep branch is scoped through its grandparent() PASSED
+
+SyncCategoriesWithTrackStatusTest > an entry filed only in a subcategory still answers for that branch() PASSED
+
+SyncCategoriesWithTrackStatusTest > await ignores an invalid manga id() PASSED
+
+CategorySortingTest > count based modes order by the supplied counts() PASSED
+
+CategorySortingTest > passing counts leaves the non count modes alone() PASSED
+
+CategorySortingTest > undated rows sort after dated rows instead of counting as 1970() PASSED
+
+CategorySortingTest > appending the count based modes did not renumber the stored ones() PASSED
+
+CategorySortingTest > date modified is read independently of date added() PASSED
+
+CategorySortingTest > name sorting is case insensitive() PASSED
+
+CategorySortingTest > stored mode out of range falls back to manual() PASSED
+
+CategorySortingTest > undated rows keep stored order among themselves() PASSED
+
+CategorySortingTest > count based modes keep the stored order here since a category list carries no counts() PASSED
+
+CategorySortingTest > manual mode returns the stored order untouched() PASSED
+
+CategorySortingTest > an entirely undated library does not collapse into a date tie() PASSED
+
+CategorySortingTest > date added newest first() PASSED
+
+CategorySortingTest > a category missing from the counts is treated as empty() PASSED
+
+ChapterRecognitionTest > Basic Ch prefix with decimal() PASSED
+
+ChapterRecognitionTest > Basic Ch prefix() PASSED
+
+ChapterRecognitionTest > Number after unwanted tag() PASSED
+
+ChapterRecognitionTest > Chapter title containing special and vol() PASSED
+
+ChapterRecognitionTest > Name containing one number and decimal() PASSED
+
+ChapterRecognitionTest > Chapter containing dot v2() PASSED
+
+ChapterRecognitionTest > Chapters ending with s() PASSED
+
+ChapterRecognitionTest > Unparseable chapter() PASSED
+
+ChapterRecognitionTest > Chapters containing season() PASSED
+
+ChapterRecognitionTest > Chapter containing manga title and number decimal() PASSED
+
+ChapterRecognitionTest > Extreme case() PASSED
+
+ChapterRecognitionTest > Number in manga title() PASSED
+
+ChapterRecognitionTest > Chapters containing ordinals() PASSED
+
+ChapterRecognitionTest > Chapter title containing hyphens() PASSED
+
+ChapterRecognitionTest > Chapter with version before number() PASSED
+
+ChapterRecognitionTest > Chapter title containing extra and vol() PASSED
+
+ChapterRecognitionTest > Basic Ch prefix with alpha postfix() PASSED
+
+ChapterRecognitionTest > Name containing one number and alpha() PASSED
+
+ChapterRecognitionTest > Extreme case with alpha() PASSED
+
+ChapterRecognitionTest > Space between ch x() PASSED
+
+ChapterRecognitionTest > Version attached to chapter number() PASSED
+
+ChapterRecognitionTest > Chapter title with ch substring() PASSED
+
+ChapterRecognitionTest > Chapter containing manga title and number alpha() PASSED
+
+ChapterRecognitionTest > Chapter with alpha without dot() PASSED
+
+ChapterRecognitionTest > Chapter title containing commas() PASSED
+
+ChapterRecognitionTest > Chapter containing manga title and number() PASSED
+
+ChapterRecognitionTest > Basic Ch prefix with space after period() PASSED
+
+ChapterRecognitionTest > Chapter title containing omake (japanese extra) and vol() PASSED
+
+ChapterRecognitionTest > Name containing one number() PASSED
+
+ChapterRecognitionTest > Number after manga title with chapter in chapter title case() PASSED
+
+ChapterRecognitionTest > Chapter with time in title() PASSED
+
+ChapterRecognitionTest > Extreme case with decimal() PASSED
+
+ChapterRecognitionTest > Chapters in format sx - chapter xx() PASSED
+
+ChapterRecognitionTest > Chapter containing multiple zeros() PASSED
+
+ChapterSmartMergeTest > unnumbered chapters are never deduplicated() PASSED
+
+ChapterSmartMergeTest > smart merge keeps the other upload when one of two same-scanlator ones is blacklisted() PASSED
+
+ChapterSmartMergeTest > a narrowed key takes only the upload it names() PASSED
+
+ChapterSmartMergeTest > last matching rule wins on overlap() PASSED
+
+ChapterSmartMergeTest > a narrowed key does not match a chapter with no upload url() PASSED
+
+ChapterSmartMergeTest > the broad key still covers every upload of that number() PASSED
+
+ChapterSmartMergeTest > blacklist key caps an unbounded scanlator name() PASSED
+
+ChapterSmartMergeTest > invalid rules fail to parse() PASSED
+
+ChapterSmartMergeTest > rule encoding round trips through parsing() PASSED
+
+ChapterSmartMergeTest > range rule pins its scanlator over global order() PASSED
+
+ChapterSmartMergeTest > blacklist key is case sensitive so stored entries keep matching() PASSED
+
+ChapterSmartMergeTest > isChapterBlacklisted tolerates stray whitespace from the source() PASSED
+
+ChapterSmartMergeTest > applies global priority keeping one chapter per number() PASSED
+
+ChapterSmartMergeTest > number with all candidates blacklisted is hidden() PASSED
+
+ChapterSmartMergeTest > falls back to global priority when preferred scanlator missing for a ranged number() PASSED
+
+ChapterSmartMergeTest > isChapterBlacklisted matches on the generated key() PASSED
+
+ChapterSmartMergeTest > blacklisted candidate falls back to next priority() PASSED
+
+ChapterSmartMergeTest > blacklist key ignores surrounding whitespace in the scanlator name() PASSED
+
+ChapterVisibilityTest > a read upload wins its number over a better ranked scanlator() PASSED
+
+ChapterVisibilityTest > the opened chapter survives the blacklist without un-hiding the others() PASSED
+
+ChapterVisibilityTest > chapters without a number are never merged() PASSED
+
+ChapterVisibilityTest > equal coverage is ordered by name so the choice is stable() PASSED
+
+ChapterVisibilityTest > blacklist still applies when merge is disabled() PASSED
+
+ChapterVisibilityTest > a scanlator with no recognised numbers ranks last() PASSED
+
+ChapterVisibilityTest > unconfigured manga merges duplicates by derived order() PASSED
+
+ChapterVisibilityTest > chapters without a scanlator name are never merged() PASSED
+
+ChapterVisibilityTest > explicit priority overrides the derived order() PASSED
+
+ChapterVisibilityTest > more distinct numbers breaks a tie on run length() PASSED
+
+ChapterVisibilityTest > merge disabled keeps every scanlator chapter() PASSED
+
+ChapterVisibilityTest > read state does not collapse a number when the merge is disabled() PASSED
+
+ChapterVisibilityTest > a read upload wins an explicitly ranked scanlator() PASSED
+
+ChapterVisibilityTest > an unbroken run outranks a bigger but fragmented one() PASSED
+
+ChapterVisibilityTest > float noise does not fragment the run() PASSED
+
+ChapterVisibilityTest > split coverage keeps every chapter number() PASSED
+
+ChapterVisibilityTest > the opened chapter survives a merge that picked a different upload() PASSED
+
+ChapterVisibilityTest > half chapters alone do not outrank a whole run() PASSED
+
+ChapterVisibilityTest > a range rule still outranks read state() PASSED
+
+ChapterVisibilityTest > a bookmarked upload wins over an unread one of the same number() PASSED
+
+ChapterVisibilityTest > derived order prefers the scanlator covering more of the story() PASSED
+
+ChapterVisibilityTest > an extra half chapter does not fragment the whole run() PASSED
+
+MissingChaptersTest > missingChaptersCount returns number of missing chapters() PASSED
+
+MissingChaptersTest > missingChaptersCount returns 0 when all unknown chapter numbers() PASSED
+
+MissingChaptersTest > calculateChapterGap returns 0 if either are not valid chapter numbers() PASSED
+
+MissingChaptersTest > calculateChapterGap returns difference() PASSED
+
+MissingChaptersTest > missingChaptersCount handles repeated base chapter numbers() PASSED
+
+MissingChaptersTest > missingChaptersCount returns 0 when empty list() PASSED
+
+GetNextChaptersTest > resume follows the unmerged list when the merge is off() PASSED
+
+GetNextChaptersTest > still resumes a started chapter of the newest series() PASSED
+
+GetNextChaptersTest > stops at the scan limit rather than reading all of history() PASSED
+
+GetNextChaptersTest > returns the chapter from the newest history entry() PASSED
+
+GetNextChaptersTest > skips an already-read chapter reached through an older history row of the same series() PASSED
+
+GetNextChaptersTest > returns null only when no history entry has a chapter left() PASSED
+
+GetNextChaptersTest > resume for one manga skips a hidden upload of its own() PASSED
+
+GetNextChaptersTest > resume skips an upload the merge has collapsed() PASSED
+
+GetNextChaptersTest > falls back to an older entry when the newest is fully read() PASSED
+
+SearchEngineTest > single letter aliases route to mapped namespace() PASSED
+
+SearchEngineTest > uppercase OR is an operator, lowercase or stays literal() PASSED
+
+SearchEngineTest > field names are case-insensitive, values keep their case() PASSED
+
+SearchEngineTest > uppercase NOT excludes the next term, lowercase not stays literal() PASSED
+
+SearchEngineTest > category and subcategory fields route to namespace() PASSED
+
+SearchEngineTest > colon title stays title search() PASSED
+
+SearchEngineTest > ast disabled keeps everything literal() PASSED
+
+SearchEngineTest > uppercase AND is an operator, not a search term() PASSED
+
+SearchEngineTest > quoted operators stay literal() PASSED
+
+SearchEngineTest > lowercase and stays literal text() PASSED
+
+SearchEngineTest > genre and artist fields route to namespace() PASSED
+
+LibraryFlagsTest > Test Flag plus operator (LibrarySort)() PASSED
+
+LibraryFlagsTest > Test Flag plus operator with old flag as base() PASSED
+
+LibraryFlagsTest > Test Flag plus operator() PASSED
+
+LibraryFlagsTest > Check the amount of flags() PASSED
+
+LibraryFlagsTest > Test default flags() PASSED
+
+FetchIntervalTest > returns interval of 1 day when chapters are released every 1 day() PASSED
+
+FetchIntervalTest > returns interval based on more recent chapters() PASSED
+
+FetchIntervalTest > returns interval based on smaller subset of recent chapters if very few chapters() PASSED
+
+FetchIntervalTest > prefers the recurring cadence over one-off quick releases() PASSED
+
+FetchIntervalTest > trusts the most recent cadence when history is noisy() PASSED
+
+FetchIntervalTest > returns interval of 2 days when chapters are released just below every 2 days() PASSED
+
+FetchIntervalTest > returns interval of 2 days when chapters are released every 2 days() PASSED
+
+FetchIntervalTest > returns interval of 1 day when delta is less than 1 day() PASSED
+
+FetchIntervalTest > returns interval of 7 days when multiple chapters in 2 days() PASSED
+
+FetchIntervalTest > returns interval with floored value when interval is decimal() PASSED
+
+FetchIntervalTest > ignores hiatus outliers when estimating cadence() PASSED
+
+FetchIntervalTest > returns interval of 7 days when multiple chapters in 1 day() PASSED
+
+FetchIntervalTest > returns default interval of 7 days when not enough distinct days() PASSED
+
+GetLibraryDuplicatesTest > a pair is listed once, not once per side() PASSED
+
+GetLibraryDuplicatesTest > a library with no duplicates reports nothing() PASSED
+
+GetLibraryDuplicatesTest > three mutually duplicated entries collapse to one group() PASSED
+
+GetLibraryDuplicatesTest > two separate pairs stay two separate groups() PASSED
+
+GetLibraryDuplicatesTest > an entry with no duplicates is not listed() PASSED
+
+GetSequelPrequelTest > disabled by default returns disabled without api call() PASSED
+
+GetSequelPrequelTest > empty result maps to hidden() PASSED
+
+GetSequelPrequelTest > cache hit does not call api twice() PASSED
+
+MangaCustomInfoTest > S2 - installed resolver supplies edited metadata for favorite mangas() PASSED
+
+MangaCustomInfoTest > S3 - non-favorite mangas never consult custom info() PASSED
+
+MangaCustomInfoTest > S1 - constructing a favorite manga without an installed resolver falls back to og values() PASSED
+
+MangaEqualityTest > S2 - hash code distinguishes mangas that differ only in resolved title() PASSED
+
+MangaEqualityTest > S1 - mangas built before and after a custom-title edit are not equal() PASSED
+
+MangaEqualityTest > S3 - mangas built under identical resolution remain structurally equal() PASSED
+
+MangaEqualityTest > S4 - non-favorite mangas ignore custom info in equality as in resolution() PASSED
+
+GetApplicationReleaseTest > When has no update expect no new update() PASSED
+
+GetApplicationReleaseTest > When has update expect new update() PASSED
+
+GetApplicationReleaseTest > When has update but is preview expect new update() PASSED
+
+AnizenMultiFeedTabsTest > tabs follow feed order() PASSED
+
+AnizenMultiFeedTabsTest > empty feeds map to empty state() PASSED
+
+AnizenMultiFeedTabsTest > library ordering sorts alphabetically when requested() PASSED
+
+AnizenMultiFeedTabsTest > per-tab state is preserved across updates() PASSED
+
+AnizenMultiFeedTabsTest > N feeds map to N tab models() PASSED
+
+AnizenMultiFeedTabsTest > selected index is clamped when feeds change() PASSED
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1792664956615.json
+
+[Incubating] Problems report is available at: file:///home/runner/work/komikku/komikku/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 24s
+116 actionable tasks: 36 executed, 21 from cache, 59 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html

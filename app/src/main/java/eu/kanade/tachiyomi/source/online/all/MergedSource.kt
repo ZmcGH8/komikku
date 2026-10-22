@@ -275,7 +275,9 @@ class MergedSource : HttpSource() {
             }
         }
         if (updates.isNotEmpty()) updateChapter.awaitAll(updates)
-        val memo = buildJsonObject { head.memo.forEach { (key, value) -> if (key != READ_UP_TO_MEMO_KEY) put(key, value) } }
+        val memo = buildJsonObject {
+            head.memo.forEach { (key, value) -> if (key != READ_UP_TO_MEMO_KEY) put(key, value) }
+        }
         updateManga.await(MangaUpdate(id = mergeId, memo = memo))
     }
 

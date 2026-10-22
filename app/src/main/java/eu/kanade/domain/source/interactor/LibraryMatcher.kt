@@ -618,8 +618,14 @@ class LibraryMatcher(
                 pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet())
             }
             sourcePreferences.hiddenLibraryMatches().let { pref ->
-                val entry = listOf(item.sourceId.toString(), item.url, item.libraryId.toString(), item.title, item.libraryTitle, MARK_USER)
-                    .joinToString("\t") { it.clean() }
+                val entry = listOf(
+                    item.sourceId.toString(),
+                    item.url,
+                    item.libraryId.toString(),
+                    item.title,
+                    item.libraryTitle,
+                    MARK_USER,
+                ).joinToString("\t") { it.clean() }
                 pref.set(pref.get().filterNot { it.startsWith("$key\t") }.toSet() + entry)
             }
         }

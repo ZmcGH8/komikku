@@ -178,11 +178,6 @@ class UpdateMangaFromRemote(
     }
 
     // KMK -->
-    /**
-     * Houri+: a backup can move an entry to another source (e.g. from an aggregator to the scan group) and store the
-     * chapter numbers that were read in the entry's memo ("1-154,156.5"). Once the new source's chapters are in,
-     * mark those read; numbers that were found are dropped and the key goes away when all have turned up.
-     */
     /** Houri+: exact read progress from a backup - see [READ_UP_TO_MEMO_KEY]. */
     private suspend fun applyReadUpTo(mangaId: Long, upTo: Double) {
         val chapters = chapterRepository.getChapterByMangaId(mangaId).filter { it.isRecognizedNumber }
@@ -197,10 +192,20 @@ class UpdateMangaFromRemote(
         }
         if (updates.isNotEmpty()) chapterRepository.updateAll(updates)
         val current = mangaRepository.getMangaById(mangaId)
-        val memo = buildJsonObject { current.memo.forEach { (key, value) -> if (key != READ_UP_TO_MEMO_KEY) put(key, value) } }
+        val memo = buildJsonObject {
+            current.memo.forEach { (key, value) -> if (key != READ_UP_TO_MEMO_KEY) put(key, value) }
+        }
         mangaRepository.update(MangaUpdate(id = mangaId, memo = memo))
     }
 
+    // KMK <--
+
+    // KMK -->
+    /**
+     * Houri+: a backup can move an entry to another source (e.g. from an aggregator to the scan group) and store the
+     * chapter numbers that were read in the entry's memo ("1-154,156.5"). Once the new source's chapters are in,
+     * mark those read; numbers that were found are dropped and the key goes away when all have turned up.
+     */
     private suspend fun applyCarriedReadProgress(mangaId: Long, raw: String) {
         val current = mangaRepository.getMangaById(mangaId)
         val wanted = parseChapterRanges(raw)

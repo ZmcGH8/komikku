@@ -36,7 +36,9 @@ class TrackingPusher(
 
     data class Result(val sent: Int, val failed: List<String>)
 
-    suspend fun pushLibrary(onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> }): Result = coroutineScope {
+    suspend fun pushLibrary(
+        onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
+    ): Result = coroutineScope {
         val favoriteIds = getFavorites.await().map { it.id }
         val tracks = getTracks.await(favoriteIds).values.flatten()
         val loggedIn = tracks.map { it.trackerId }.distinct()
@@ -86,7 +88,9 @@ class TrackingPusher(
             added.finished_reading_date = wanted.finishDate
             service.update(added, didReadChapter = false)
         }
-        updated.toDomainTrack(idRequired = false)?.let { insertTrack.await(it.copy(id = track.id, mangaId = track.mangaId)) }
+        updated.toDomainTrack(idRequired = false)?.let {
+            insertTrack.await(it.copy(id = track.id, mangaId = track.mangaId))
+        }
     }
 
     companion object {

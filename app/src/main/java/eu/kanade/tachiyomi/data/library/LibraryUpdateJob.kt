@@ -634,7 +634,10 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         val update = updateMangaFromRemote(
             source = source,
             manga = manga,
-            fetchDetails = libraryPreferences.autoUpdateMetadata().get(),
+            // KMK --> Houri+: an entry that was never fetched also gets its details (title, description, cover),
+            // e.g. a merge or a moved entry from a restored backup
+            fetchDetails = libraryPreferences.autoUpdateMetadata().get() || manga.lastUpdate == 0L,
+            // KMK <--
             fetchChapters = true,
             fetchWindow = fetchWindow,
         )

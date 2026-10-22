@@ -25,6 +25,7 @@ import logcat.LogPriority
 import mihon.app.di.globalAppGraph
 import okhttp3.CacheControl
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import okhttp3.Response
 import okio.BufferedSource
@@ -226,6 +227,13 @@ class MangaCoverFetcher(
             if (sourceHeaders != null) {
                 headers(sourceHeaders)
             }
+            // KMK --> Houri+: covers on a site's image CDN that refuses requests without that site as referer,
+            // for entries whose own source doesn't send it (merged entries, custom covers)
+            if (sourceHeaders?.get("Referer") == null) {
+                val host = requestUrl.toHttpUrlOrNull()?.host.orEmpty()
+                REFERER_BY_CDN.entries.firstOrNull { host.endsWith(it.key) }?.let { header("Referer", it.value) }
+            }
+            // KMK <--
         }
 
         when {
@@ -443,6 +451,12 @@ class MangaCoverFetcher(
 
     companion object {
         val USE_CUSTOM_COVER_KEY = Extras.Key(true)
+
+        // KMK --> Houri+
+        private val REFERER_BY_CDN = mapOf(
+            "pstatic.net" to "https://www.webtoons.com/",
+        )
+        // KMK <--
 
         private val CACHE_CONTROL_NO_STORE = CacheControl.Builder().noStore().build()
         private val CACHE_CONTROL_NO_NETWORK_NO_CACHE = CacheControl.Builder().noCache().onlyIfCached().build()

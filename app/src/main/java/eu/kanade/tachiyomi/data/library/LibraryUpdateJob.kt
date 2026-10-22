@@ -356,6 +356,12 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                     GetCategoryUpdateInterval.intervalDaysFor(categoryIntervals, it.categories.toSet())
                 // KMK <--
                 when {
+                    // KMK --> Houri+: an entry that was never fetched (a rebuilt merge, an entry moved to
+                    // another source by a restore) gets its first chapter list whatever the skip settings
+                    // say: it would otherwise be skipped as "completed", "not caught up" or "outside its
+                    // release period" and keep showing no chapters, or only some of its sources' chapters.
+                    it.manga.lastUpdate == 0L -> true
+                    // KMK <--
                     it.manga.updateStrategy == UpdateStrategy.ONLY_FETCH_ONCE && it.totalChapters > 0L -> {
                         skippedUpdates.add(
                             it.manga to

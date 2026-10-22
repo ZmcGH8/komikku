@@ -66,12 +66,17 @@ class MangaRestorer(
     private var restoredCategories: List<Category> = emptyList()
 
     /**
-     * `mergeUrl`/`mangaUrl` of every merged row already in the database, plus every
+     * `mergeUrl`/`mangaUrl`/`mangaSource` of every merged row already in the database, plus every
      * row this restore inserted. Backs the "is this reference already restored?"
      * check, which used to load the whole `merged` table per merged entry and then
      * scan it linearly per reference.
+     *
+     * KMK --> Houri+: the source is part of the key. A merge entry takes the url of the series it was
+     * made from, so its own row and that series' row have the same `mergeUrl`/`mangaUrl`; keyed on the
+     * urls alone, whichever came second was taken as already restored and dropped - a restored merge
+     * lost its info source (the official release) and kept only the scans. KMK <--
      */
-    private val knownMergedReferences = ConcurrentHashMap.newKeySet<Pair<String, String>>()
+    private val knownMergedReferences = ConcurrentHashMap.newKeySet<Triple<String, String, Long>>()
 
     private val pendingEdits = ArrayList<CustomMangaInfo>()
     private val pendingEditsLock = Any()
@@ -93,7 +98,7 @@ class MangaRestorer(
         knownMergedReferences.clear()
         knownMergedReferences.addAll(
             handler.awaitList { mergedQueries.selectAll(MergedMangaMapper::map) }
-                .map { it.mergeUrl to it.mangaUrl },
+                .map { Triple(it.mergeUrl, it.mangaUrl, it.mangaSourceId) },
         )
     }
 
@@ -146,8 +151,17 @@ class MangaRestorer(
      * Returns how many were taken out.
      */
     suspend fun removeFromLibraryUnless(keep: Set<Pair<Long, String>>): Int {
-        val drop = handler.awaitList { mangasQueries.getFavorites(MangaMapper::mapManga) }
-            .filter { (it.source to it.url) !in keep }
+        val favorites = handler.awaitList { mangasQueries.getFavorites(MangaMapper::mapManga) }
+        val drop = favorites.filter { (it.source to it.url) !in keep }.toMutableList()
+        // Two rows for one series (left by earlier restores) are one library entry twice: only the row a
+        // restore resolves the series to - the one that just received the backup's data - stays.
+        favorites.filter { (it.source to it.url) in keep }
+            .groupBy { it.source to it.url }
+            .filterValues { it.size > 1 }
+            .forEach { (key, rows) ->
+                val restored = getMangaByUrlAndSourceId.await(key.second, key.first)?.id ?: rows.first().id
+                drop += rows.filter { it.id != restored }
+            }
         if (drop.isNotEmpty()) {
             updateManga.awaitAll(drop.map { MangaUpdate(id = it.id, favorite = false, dateAdded = 0) })
         }
@@ -739,7 +753,12 @@ class MangaRestorer(
                 // If the backupMergedMangaReference isn't in the db,
                 // remove the id and insert a new backupMergedMangaReference
                 // Store the inserted id in the backupMergedMangaReference
-                if (!knownMergedReferences.contains(backupMergedMangaReference.mergeUrl to backupMergedMangaReference.mangaUrl)) {
+                val refKey = Triple(
+                    backupMergedMangaReference.mergeUrl,
+                    backupMergedMangaReference.mangaUrl,
+                    backupMergedMangaReference.mangaSourceId,
+                )
+                if (!knownMergedReferences.contains(refKey)) {
                     // Let the db assign the id
                     // KMK -->
                     val mergedManga = handler.awaitList {
@@ -769,7 +788,7 @@ class MangaRestorer(
                             )
                         }
                     }
-                    knownMergedReferences.add(backupMergedMangaReference.mergeUrl to backupMergedMangaReference.mangaUrl)
+                    knownMergedReferences.add(refKey)
                 }
             }
     }

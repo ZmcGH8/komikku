@@ -21,6 +21,13 @@ data class RestoreOptions(
      * Restoring into a finished library can skip it here instead of stopping the job.
      */
     val updateLibrary: Boolean = true,
+    /**
+     * Houri+: make the library exactly what the backup holds. A restore otherwise only adds: entries that are
+     * in the library but not in the backup stay, and merge entries keep the links they already had. With this
+     * on, those entries are taken out of the library (nothing is deleted) and the backup's merge entries get
+     * exactly the backup's links. Default off: it is for restoring a whole prepared library.
+     */
+    val replaceLibrary: Boolean = false,
     // KMK <--
 ) {
 
@@ -35,6 +42,7 @@ data class RestoreOptions(
         // SY <--
         // KMK -->
         updateLibrary,
+        replaceLibrary,
         // KMK <--
     )
 
@@ -98,6 +106,7 @@ data class RestoreOptions(
             // SY <--
             // KMK -->
             updateLibrary = array.getOrNull(6) ?: true,
+            replaceLibrary = array.getOrNull(7) ?: false,
             // KMK <--
         )
 
@@ -111,6 +120,13 @@ data class RestoreOptions(
             label = KMR.strings.restore_update_library,
             getter = RestoreOptions::updateLibrary,
             setter = { options, enabled -> options.copy(updateLibrary = enabled) },
+        )
+
+        /** Houri+: see [RestoreOptions.replaceLibrary]. Shown next to [updateLibraryEntry]. */
+        val replaceLibraryEntry = Entry(
+            label = KMR.strings.restore_replace_library,
+            getter = RestoreOptions::replaceLibrary,
+            setter = { options, enabled -> options.copy(replaceLibrary = enabled) },
         )
         // KMK <--
     }

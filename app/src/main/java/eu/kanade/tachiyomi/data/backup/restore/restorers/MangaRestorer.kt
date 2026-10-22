@@ -29,6 +29,7 @@ import tachiyomi.domain.manga.interactor.InsertFlatMetadata
 import tachiyomi.domain.manga.interactor.SetCustomMangaInfo
 import tachiyomi.domain.manga.model.CustomMangaInfo
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.manga.model.MangaUpdate
 import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.domain.track.interactor.InsertTrack
 import tachiyomi.domain.track.model.Track
@@ -122,6 +123,37 @@ class MangaRestorer(
     fun discardPendingEdits() {
         synchronized(pendingEditsLock) { pendingEdits.clear() }
     }
+
+    // KMK --> Houri+: "Replace library" (see RestoreOptions.replaceLibrary)
+    /**
+     * Drops the links of the merge entries at [mergeUrls] before the backup's merge entries are restored, so
+     * they end up with exactly the backup's links. A restore otherwise only adds links, and a link it already
+     * has keeps its old settings (which source gives the info, priority), so a rebuilt merge kept its old
+     * sources. Only the link rows go: the merged entries and their chapters stay.
+     */
+    suspend fun clearMergeLinks(mergeUrls: Collection<String>) {
+        if (mergeUrls.isEmpty()) return
+        val urls = mergeUrls.toHashSet()
+        handler.await(inTransaction = true) {
+            urls.forEach { mergedQueries.deleteByMergeUrl(it) }
+        }
+        knownMergedReferences.removeIf { it.first in urls }
+    }
+
+    /**
+     * Takes every library entry that the backup does not hold as a library entry out of the library, as
+     * "Remove from library" does: the entry, its chapters, history and tracking stay in the database.
+     * Returns how many were taken out.
+     */
+    suspend fun removeFromLibraryUnless(keep: Set<Pair<Long, String>>): Int {
+        val drop = handler.awaitList { mangasQueries.getFavorites(MangaMapper::mapManga) }
+            .filter { (it.source to it.url) !in keep }
+        if (drop.isNotEmpty()) {
+            updateManga.awaitAll(drop.map { MangaUpdate(id = it.id, favorite = false, dateAdded = 0) })
+        }
+        return drop.size
+    }
+    // KMK <--
 
     /**
      * Returns which pass of the restore each entry belongs in, as of right now.

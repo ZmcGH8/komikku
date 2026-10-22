@@ -226,6 +226,7 @@ class BackupRestorer(
                         uri,
                         if (options.categories) backup.backupCategories else emptyList(),
                         restoredCategoryIds,
+                        options.replaceLibrary,
                     )
                     // KMK <--
                 }
@@ -336,9 +337,13 @@ class BackupRestorer(
         backupCategories: List<BackupCategory>,
         // KMK -->
         restoredCategoryIds: Map<Long, Long> = emptyMap(),
+        replaceLibrary: Boolean = false,
         // KMK <--
     ) = launch {
         val mangaStart = SystemClock.elapsedRealtime()
+        // KMK --> Houri+: the backup's own library entries, for "Replace library"
+        val backupLibrary = HashSet<Pair<Long, String>>()
+        // KMK <--
         val decoder = BackupDecoder(context)
         val phaseOf = mangaRestorer.phaseMatcher()
         mangaRestorer.prepare()
@@ -357,6 +362,9 @@ class BackupRestorer(
         decoder.decodeEntries(uri)
             .withIndex()
             .collect { (index, manga) ->
+                // KMK -->
+                if (replaceLibrary && manga.favorite) backupLibrary += manga.source to manga.url
+                // KMK <--
                 when (phaseOf(manga)) {
                     RestorePhase.NEW -> restoreEntry(manga)
                     RestorePhase.EXISTING -> laterIndices.set(index)
@@ -380,8 +388,18 @@ class BackupRestorer(
         // bar stopped short of 100%.
         if (pendingEntries.isNotEmpty()) restoreEntries(pendingEntries.toList())
         // KMK <--
+        // KMK --> Houri+: a replaced library's merge entries get exactly the backup's links
+        if (replaceLibrary) mangaRestorer.clearMergeLinks(mergedEntries.map { it.url })
+        // KMK <--
         mergedEntries.chunked(MANGA_CHUNK_SIZE)
             .forEach { restoreEntries(it) }
+        // KMK --> Houri+: and only the backup's entries stay in the library. Skipped when nothing was read
+        // as a library entry, so a backup without any can never empty the library.
+        if (replaceLibrary && backupLibrary.isNotEmpty()) {
+            val removed = mangaRestorer.removeFromLibraryUnless(backupLibrary)
+            logcat(LogPriority.INFO) { "Replace library: took $removed entries not in the backup out of the library" }
+        }
+        // KMK <--
 
         logcat(LogPriority.INFO) {
             "Restore wrote $restoredEntries entries in ${SystemClock.elapsedRealtime() - mangaStart}ms"

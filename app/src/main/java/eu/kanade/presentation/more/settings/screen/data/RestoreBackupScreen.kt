@@ -95,15 +95,16 @@ class RestoreBackupScreen(
                     // Follow-up action rather than restore content, so it sits in its own
                     // section below what is being read from the backup.
                     item {
-                        val entry = RestoreOptions.updateLibraryEntry
                         SectionCard {
-                            LabeledCheckbox(
-                                label = stringResource(entry.label),
-                                checked = entry.getter(state.options),
-                                onCheckedChange = {
-                                    model.toggle(entry.setter, it)
-                                },
-                            )
+                            listOf(RestoreOptions.updateLibraryEntry, RestoreOptions.replaceLibraryEntry).forEach { entry ->
+                                LabeledCheckbox(
+                                    label = stringResource(entry.label),
+                                    checked = entry.getter(state.options),
+                                    onCheckedChange = {
+                                        model.toggle(entry.setter, it)
+                                    },
+                                )
+                            }
                         }
                     }
                     // KMK <--

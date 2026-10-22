@@ -17,6 +17,10 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import mihon.app.di.globalAppGraph
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
@@ -32,6 +36,7 @@ import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.GetMergedReferencesById
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.manga.model.MangaUpdate
 import tachiyomi.domain.manga.model.MergedMangaReference
 import tachiyomi.domain.source.service.SourceManager
 
@@ -48,6 +53,7 @@ class MergedSource : HttpSource() {
     private val getMergedChaptersByMangaId: GetMergedChaptersByMangaId by lazy { globalAppGraph.getMergedChaptersByMangaId }
     private val updateChapter: UpdateChapter by lazy { globalAppGraph.updateChapter }
     private val getChaptersByMangaId: GetChaptersByMangaId by lazy { globalAppGraph.getChaptersByMangaId }
+    private val updateManga by lazy { globalAppGraph.updateManga }
     // KMK <--
 
     override val id: Long = MERGED_SOURCE_ID
@@ -193,6 +199,11 @@ class MergedSource : HttpSource() {
                     if (e is CancellationException) throw e
                 }
             }
+            try {
+                applyCarriedReadProgress(manga.id)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
             // KMK <--
             exception?.let { throw it }
         }
@@ -212,6 +223,30 @@ class MergedSource : HttpSource() {
         if (updates.isNotEmpty()) updateChapter.awaitAll(updates)
     }
     // KMK <--
+
+    /**
+     * Houri+: read progress carried in by a backup. When a merge is rebuilt without the old library copy
+     * (e.g. an aggregator), the backup stores the chapter numbers that were read in the merged entry's memo
+     * ("1-154,156.5"). After a sync, chapters with those numbers are marked read; numbers that were found are
+     * dropped and the key is removed once every number has turned up.
+     */
+    private suspend fun applyCarriedReadProgress(mergeId: Long) {
+        val head = getManga.await(mergeId) ?: return
+        val raw = head.memo[CARRIED_READ_MEMO_KEY]?.jsonPrimitive?.contentOrNull ?: return
+        val wanted = parseChapterRanges(raw)
+        val chapters = getMergedChaptersByMangaId.await(mergeId, dedupe = false)
+        val updates = chapters
+            .filter { !it.read && it.isRecognizedNumber && it.chapterNumber in wanted }
+            .map { ChapterUpdate(id = it.id, read = true) }
+        if (updates.isNotEmpty()) updateChapter.awaitAll(updates)
+        val found = chapters.filter { it.isRecognizedNumber }.mapTo(HashSet()) { it.chapterNumber }
+        val left = wanted - found
+        val memo = buildJsonObject {
+            head.memo.forEach { (key, value) -> if (key != CARRIED_READ_MEMO_KEY) put(key, value) }
+            if (left.isNotEmpty()) put(CARRIED_READ_MEMO_KEY, JsonPrimitive(formatChapterRanges(left)))
+        }
+        updateManga.await(MangaUpdate(id = mergeId, memo = memo))
+    }
 
     suspend fun MergedMangaReference.load(): LoadedMangaSource {
         var manga = getManga.await(mangaUrl, mangaSourceId)
@@ -238,3 +273,48 @@ class MergedSource : HttpSource() {
     override val supportsLatest = false
     override val name = "MergedSource"
 }
+
+// KMK --> Houri+: chapter numbers read before a merge was rebuilt from a backup
+const val CARRIED_READ_MEMO_KEY = "houri.readChapters"
+
+/** "1-3,5.5,8" -> {1, 2, 3, 5.5, 8}; ranges cover whole chapters only. */
+internal fun parseChapterRanges(text: String): Set<Double> {
+    val out = HashSet<Double>()
+    for (part in text.split(',')) {
+        val p = part.trim()
+        if (p.isEmpty()) continue
+        val dash = p.indexOf('-', startIndex = 1)
+        if (dash > 0) {
+            val from = p.substring(0, dash).trim().toIntOrNull() ?: continue
+            val to = p.substring(dash + 1).trim().toIntOrNull() ?: continue
+            if (to - from > 20000) continue
+            for (n in from..to) out.add(n.toDouble())
+        } else {
+            p.toDoubleOrNull()?.let(out::add)
+        }
+    }
+    return out
+}
+
+internal fun formatChapterRanges(numbers: Set<Double>): String {
+    val sorted = numbers.sorted()
+    val parts = mutableListOf<String>()
+    var i = 0
+    while (i < sorted.size) {
+        val start = sorted[i]
+        if (start % 1.0 != 0.0) {
+            parts.add(start.toString())
+            i++
+            continue
+        }
+        var end = start
+        while (i + 1 < sorted.size && sorted[i + 1] == end + 1.0) {
+            end = sorted[i + 1]
+            i++
+        }
+        parts.add(if (end == start) start.toLong().toString() else "${start.toLong()}-${end.toLong()}")
+        i++
+    }
+    return parts.joinToString(",")
+}
+// KMK <--

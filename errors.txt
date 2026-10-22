@@ -1,0 +1,8 @@
+BUILD SUCCESSFUL in 3m 23s
+93 actionable tasks: 71 executed, 11 from cache, 11 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+--
+BUILD SUCCESSFUL in 59m 8s
+526 actionable tasks: 456 executed, 61 from cache, 9 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html

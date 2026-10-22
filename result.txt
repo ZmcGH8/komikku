@@ -1,0 +1,4 @@
+run: https://github.com/ZmcGH8/komikku/actions/runs/39762408285
+branch: houri-plus
+commit: d784818df2ffd959bbbd575a3d8b9e62fb198741
+result: success

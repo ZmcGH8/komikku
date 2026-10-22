@@ -22,6 +22,8 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
+import coil3.gif.AnimatedImageDecoder
+import coil3.gif.GifDecoder
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowRgb565
@@ -465,6 +467,14 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 // Mihon -->
                 add(eu.kanade.tachiyomi.data.coil.NewImageDecoder.Factory())
                 // Mihon <--
+                // KMK --> Houri+: animated covers (GIF, animated WebP) play in the library and on the
+                // details screen instead of showing their first frame. Static images never match these.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    add(AnimatedImageDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+                // KMK <--
                 // Fetcher.Factory
                 add(BufferedSourceFetcher.Factory())
                 add(MangaCoverFetcher.MangaCoverFactory(callFactoryLazy))

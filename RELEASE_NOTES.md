@@ -16,6 +16,7 @@ files moved. See .github/scripts/release_notes.py.
 ### Improve
 
 - Library covers that aren't the usual book shape are shown whole instead of cropped, so their titles aren't cut off.
+- Animated covers (GIF and animated WebP, as some scan groups use) play in the library and on the details screen instead of showing only their first frame.
 
 - Hiding library titles on sources: author names spelled in another romanization now count as the same person, and a source that lists no author is matched by a distinctive title. Matches made by older, looser rules are checked again.
 

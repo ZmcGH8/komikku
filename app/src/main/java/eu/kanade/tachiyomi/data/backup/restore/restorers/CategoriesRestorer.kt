@@ -17,10 +17,25 @@ class CategoriesRestorer(
      * callers can resolve a backup's category references by identity. [eu.kanade.tachiyomi.data.backup.models.BackupManga.categoryIds]
      * needs that; resolving by name or sort is ambiguous once subcategories exist.
      */
-    suspend operator fun invoke(backupCategories: List<BackupCategory>): Map<Long, Long> {
+    suspend operator fun invoke(
+        backupCategories: List<BackupCategory>,
+        // KMK --> Houri+: "Replace library" - the app's categories are removed first, so the backup's tree (names,
+        // capitalisation, parents, order) is restored exactly instead of being matched onto old categories by name.
+        // Library entries lose their old category links with them; the restore then sets the backup's links.
+        replaceExisting: Boolean = false,
+        // KMK <--
+    ): Map<Long, Long> {
         // KMK -->
         val restoredIdsByBackupId = mutableMapOf<Long, Long>()
         if (backupCategories.isNotEmpty()) {
+            if (replaceExisting) {
+                val existing = handler.awaitList {
+                    categoriesQueries.getCategories(tachiyomi.data.category.CategoryMapper::mapCategory)
+                }
+                handler.await(inTransaction = true) {
+                    existing.filter { !it.isSystemCategory }.forEach { categoriesQueries.delete(it.id) }
+                }
+            }
             val dbCategories = getCategories.await()
             val dbCategoriesByName = dbCategories.associateBy { it.name }
             var nextOrder = dbCategories.maxOfOrNull { it.order }?.plus(1) ?: 0L

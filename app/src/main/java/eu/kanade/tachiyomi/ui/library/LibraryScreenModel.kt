@@ -115,6 +115,7 @@ import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.library.model.LibrarySort
 import tachiyomi.domain.library.model.SubcategoryUpdateScope
 import tachiyomi.domain.library.model.artistsFromDescription
+import tachiyomi.domain.library.model.averageRatingFromDescription
 import tachiyomi.domain.library.model.averageReadersFromDescription
 import tachiyomi.domain.library.model.sort
 import tachiyomi.domain.library.model.studiosFromDescription
@@ -868,27 +869,10 @@ class LibraryScreenModel(
                 averageReadersFromDescription(item.libraryManga.manga.description) ?: -1.0
             }
         }
-        val firstAuthors by lazy {
-            favoritesById.mapValues { (_, item) -> splitAuthors(item.libraryManga.manga.author).firstOrNull() }
-        }
-        val firstArtists by lazy {
-            favoritesById.mapValues { (_, item) -> artistsOf(item).firstOrNull() }
-        }
-        val firstStudios by lazy {
-            favoritesById.mapValues { (_, item) -> studiosOf(item).firstOrNull() }
-        }
-        val mainScanlators = if (keys.any { (groupSort ?: it.sort).type == LibrarySort.Type.Scanlator }) {
-            loadScanlatorCounts().mapValues { (_, counts) -> counts.maxByOrNull { it.value }?.key }
-        } else {
-            emptyMap()
-        }
-
-        // Entries without a value always go last
-        fun compareNamesMissingLast(name1: String?, name2: String?, ascending: Boolean): Int = when {
-            name1 == name2 -> 0
-            name1 == null -> if (ascending) 1 else -1
-            name2 == null -> if (ascending) -1 else 1
-            else -> name1.lowercase().compareTo(name2.lowercase())
+        val averageScores by lazy {
+            favoritesById.mapValues { (_, item) ->
+                averageRatingFromDescription(item.libraryManga.manga.description) ?: -1.0
+            }
         }
         // KMK <--
 
@@ -948,17 +932,8 @@ class LibraryScreenModel(
                 LibrarySort.Type.Popularity -> {
                     (averageReaders[manga1.id] ?: -1.0).compareTo(averageReaders[manga2.id] ?: -1.0)
                 }
-                LibrarySort.Type.Author -> {
-                    compareNamesMissingLast(firstAuthors[manga1.id], firstAuthors[manga2.id], sort.isAscending)
-                }
-                LibrarySort.Type.Artist -> {
-                    compareNamesMissingLast(firstArtists[manga1.id], firstArtists[manga2.id], sort.isAscending)
-                }
-                LibrarySort.Type.Studio -> {
-                    compareNamesMissingLast(firstStudios[manga1.id], firstStudios[manga2.id], sort.isAscending)
-                }
-                LibrarySort.Type.Scanlator -> {
-                    compareNamesMissingLast(mainScanlators[manga1.id], mainScanlators[manga2.id], sort.isAscending)
+                LibrarySort.Type.AverageScore -> {
+                    (averageScores[manga1.id] ?: -1.0).compareTo(averageScores[manga2.id] ?: -1.0)
                 }
                 // KMK <--
             }

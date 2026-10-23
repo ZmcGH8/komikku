@@ -19,4 +19,18 @@ fun averageReadersFromDescription(description: String?): Double? {
     }
     return number * multiplier
 }
+
+private val AVERAGE_RATING = Regex("""avg\.?\s+rating\W*([\d.,]+)\s*(?:/\s*([\d.,]+))?""", RegexOption.IGNORE_CASE)
+
+/**
+ * Custom build: the "Avg Rating" written in an entry's description, on a 10-point scale
+ * (e.g. "**Avg Rating**: 7.84/10" -> 7.84, "4.2/5" -> 8.4), or null when the description has none.
+ */
+fun averageRatingFromDescription(description: String?): Double? {
+    if (description.isNullOrEmpty()) return null
+    val match = AVERAGE_RATING.find(description) ?: return null
+    val value = match.groupValues[1].replace(",", ".").trimEnd('.').toDoubleOrNull() ?: return null
+    val scale = match.groupValues[2].replace(",", ".").trimEnd('.').toDoubleOrNull()?.takeIf { it > 0.0 } ?: 10.0
+    return value * 10.0 / scale
+}
 // KMK <--

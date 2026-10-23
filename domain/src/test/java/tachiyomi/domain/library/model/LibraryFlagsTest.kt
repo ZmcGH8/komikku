@@ -12,7 +12,7 @@ class LibraryFlagsTest {
     @Test
     fun `Check the amount of flags`() {
         LibraryDisplayMode.values.size shouldBe 6
-        LibrarySort.types.size shouldBe 16 // KMK: +Popularity, Author, Artist, Studio, Scanlator (Houri+)
+        LibrarySort.types.size shouldBe 13 // KMK: +Popularity, AverageScore (Houri+)
         LibrarySort.directions.size shouldBe 2
     }
 

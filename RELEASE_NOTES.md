@@ -11,9 +11,13 @@ files moved. See .github/scripts/release_notes.py.
 ### New
 
 - **Restore → Replace library**: the library ends up exactly like the backup. Entries that aren't in it leave the library (nothing is deleted), merges get exactly the backup's sources, and read chapters and tracking come from the backup.
+- **Sort by Average score**: orders the library by the Avg Rating in each entry's description (our own score), like the Avg Readers sort does for readers. It's separate from the tracker-score sort.
+- **Restore → Replace library** also replaces the categories: the app's old categories are removed and the backup's category tree (names, parents, order) is restored exactly.
 - **Restore → Send tracking to trackers**: after restoring, MyAnimeList, AniList, Anime-Planet and other logged-in trackers are updated to the backup's status, chapters and scores.
 
 ### Improve
+
+- The Author, Artist, Studio and Scanlator sorts are gone from the sort menu; they're still there as Group by options.
 
 - Library covers that aren't the usual book shape are shown whole instead of cropped, so their titles aren't cut off.
 - Animated covers (GIF and animated WebP, as some scan groups use) play in the library and on the details screen instead of showing only their first frame.

@@ -781,10 +781,7 @@
     <string name="action_custom_match_same">Same, hide it</string>
     <string name="action_custom_match_different">Not the same</string>
     <string name="action_sort_popularity">Popularity (Avg Readers)</string>
-    <string name="action_sort_author">Author</string>
-    <string name="action_sort_artist">Artist</string>
-    <string name="action_sort_studio">Studio</string>
-    <string name="action_sort_scanlator">Scanlator</string>
+    <string name="action_sort_average_score">Average score (Avg Rating)</string>
     <string name="custom_group_by_tag">Tags</string>
     <string name="custom_group_by_author">Authors</string>
     <string name="custom_group_by_artist">Artists</string>

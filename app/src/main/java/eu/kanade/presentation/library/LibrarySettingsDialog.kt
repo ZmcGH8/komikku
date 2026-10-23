@@ -285,10 +285,7 @@ private fun ColumnScope.SortPage(
             // SY <--
             // KMK --> Houri+
             KMR.strings.action_sort_popularity to LibrarySort.Type.Popularity,
-            KMR.strings.action_sort_author to LibrarySort.Type.Author,
-            KMR.strings.action_sort_artist to LibrarySort.Type.Artist,
-            KMR.strings.action_sort_studio to LibrarySort.Type.Studio,
-            KMR.strings.action_sort_scanlator to LibrarySort.Type.Scanlator,
+            KMR.strings.action_sort_average_score to LibrarySort.Type.AverageScore,
             // KMK <--
             MR.strings.action_sort_random to LibrarySort.Type.Random,
         )

@@ -41,12 +41,12 @@ data class LibrarySort(
         // Houri+ (custom build): sort types use the otherwise unused top bit so upstream can keep adding types
         /** "Avg Readers" from the entry's description */
         data object Popularity : Type(0b10000000)
-        data object Author : Type(0b10000100)
-        data object Scanlator : Type(0b10001000)
-        data object Artist : Type(0b10001100)
 
-        /** Studio from the "Credits" in the entry's description */
-        data object Studio : Type(0b10010000)
+        // 0b10000100..0b10010000 were the Author/Scanlator/Artist/Studio sorts (now group-by only); not reused so
+        // a category that still stores one of them falls back to the default sort
+
+        /** "Avg Rating" from the entry's description (our own score, not the trackers') */
+        data object AverageScore : Type(0b10010100)
         // KMK <--
 
         companion object {
@@ -95,7 +95,7 @@ data class LibrarySort(
                 Type.DateAdded,
                 Type.TrackerMean,
                 /* SY -->*/ Type.TagList, /* SY <--*/
-                /* KMK -->*/ Type.Popularity, Type.Author, Type.Artist, Type.Studio, Type.Scanlator, /* KMK <--*/
+                /* KMK -->*/ Type.Popularity, Type.AverageScore, /* KMK <--*/
                 Type.Random,
             )
         }
@@ -128,10 +128,7 @@ data class LibrarySort(
                     "TAG_LIST" -> Type.TagList
                     // KMK -->
                     "POPULARITY" -> Type.Popularity
-                    "AUTHOR" -> Type.Author
-                    "SCANLATOR" -> Type.Scanlator
-                    "ARTIST" -> Type.Artist
-                    "STUDIO" -> Type.Studio
+                    "AVERAGE_SCORE" -> Type.AverageScore
                     // KMK <--
                     // SY <--
                     "RANDOM" -> Type.Random
@@ -160,10 +157,7 @@ data class LibrarySort(
             Type.TagList -> "TAG_LIST"
             // KMK -->
             Type.Popularity -> "POPULARITY"
-            Type.Author -> "AUTHOR"
-            Type.Scanlator -> "SCANLATOR"
-            Type.Artist -> "ARTIST"
-            Type.Studio -> "STUDIO"
+            Type.AverageScore -> "AVERAGE_SCORE"
             // KMK <--
             // SY <--
             Type.Random -> "RANDOM"

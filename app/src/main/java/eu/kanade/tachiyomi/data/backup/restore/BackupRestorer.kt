@@ -199,7 +199,12 @@ class BackupRestorer(
                 // KMK --> Needed before restoreManga: a backup's category reference only means
                 // anything once the tree exists and each backup id has its new database id.
                 val restoredCategoryIds = if (options.categories) {
-                    restoreCategories(backup.backupCategories)
+                    restoreCategories(
+                        backup.backupCategories,
+                        // KMK --> Houri+: a replaced library also takes the backup's category tree as it is
+                        replaceExisting = options.replaceLibrary && options.libraryEntries,
+                        // KMK <--
+                    )
                 } else {
                     emptyMap()
                 }
@@ -301,9 +306,14 @@ class BackupRestorer(
     }
 
     context(scope: CoroutineScope)
-    private /* KMK --> */suspend /* KMK <-- */ fun restoreCategories(backupCategories: List<BackupCategory>): Map<Long, Long> {
+    private /* KMK --> */suspend /* KMK <-- */ fun restoreCategories(
+        backupCategories: List<BackupCategory>,
+        // KMK -->
+        replaceExisting: Boolean = false,
+        // KMK <--
+    ): Map<Long, Long> {
         scope.ensureActive()
-        val restoredIdsByBackupId = categoriesRestorer(backupCategories)
+        val restoredIdsByBackupId = categoriesRestorer(backupCategories, /* KMK --> */ replaceExisting /* KMK <-- */)
 
         restoreProgress.incrementAndGet()
         with(notifier) {
